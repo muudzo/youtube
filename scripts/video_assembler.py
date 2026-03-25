@@ -41,6 +41,36 @@ BRIGHTNESS_SAMPLE_COUNT = 5     # number of frames to sample per clip
 BRIGHTNESS_BOOST_FACTOR = 2.5   # multiplier applied to dark clips that we keep
 
 
+def ken_burns_zoom(clip, zoom_start=1.0, zoom_end=1.15):
+    """Apply subtle Ken Burns zoom effect — makes static footage feel alive."""
+    w, h = clip.size
+
+    def zoom_frame(get_frame, t):
+        progress = t / max(clip.duration, 0.1)
+        scale = zoom_start + (zoom_end - zoom_start) * progress
+        frame = get_frame(t)
+        # Scale up the frame
+        new_w, new_h = int(w * scale), int(h * scale)
+        from PIL import Image
+        img = Image.fromarray(frame)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+        # Center crop back to original size
+        left = (new_w - w) // 2
+        top = (new_h - h) // 2
+        img = img.crop((left, top, left + w, top + h))
+        return np.array(img)
+
+    return clip.transform(zoom_frame)
+
+
+def apply_transition(clip, fade_duration=0.5):
+    """Apply fade in/out transitions to a clip for smooth cuts."""
+    if clip.duration <= fade_duration * 2:
+        return clip
+    clip = clip.with_effects([vfx.FadeIn(fade_duration), vfx.FadeOut(fade_duration)])
+    return clip
+
+
 def load_and_resize_clip(video_path: Path, target_duration: float) -> VideoFileClip:
     """Load a video clip, resize to target dimensions, and trim/loop to target duration."""
     clip = VideoFileClip(str(video_path))
@@ -53,6 +83,10 @@ def load_and_resize_clip(video_path: Path, target_duration: float) -> VideoFileC
     elif clip.duration < target_duration:
         loops_needed = int(target_duration / clip.duration) + 1
         clip = concatenate_videoclips([clip] * loops_needed).subclipped(0, target_duration)
+
+    # Apply Ken Burns zoom (subtle motion) + fade transitions
+    clip = ken_burns_zoom(clip, zoom_start=1.0, zoom_end=random.uniform(1.08, 1.18))
+    clip = apply_transition(clip, fade_duration=0.4)
 
     return clip
 
@@ -141,16 +175,12 @@ def create_footage_sequence(footage_files: list, total_duration: float):
     target_clip_duration = 8.0
     num_clips_needed = max(1, int(total_duration / target_clip_duration))
 
-    # Pick clips evenly from available footage, with some randomness
+    # Shuffle clips for visual variety (stolen from MoneyPrinterTurbo)
+    # Instead of sequential order, randomize for more dynamic feel
+    random.shuffle(usable)
     selected = []
-    step = max(1, len(usable) // num_clips_needed)
-    for i in range(0, len(usable), step):
-        selected.append(usable[i])
-        if len(selected) >= num_clips_needed:
-            break
-
-    while len(selected) < num_clips_needed:
-        selected.append(random.choice(usable))
+    for i in range(num_clips_needed):
+        selected.append(usable[i % len(usable)])
 
     clip_duration = total_duration / len(selected)
     print(f"  Using {len(selected)} clips at ~{clip_duration:.1f}s each")
@@ -266,7 +296,10 @@ def assemble_video(
         if bg_music.duration < total_duration:
             loops = int(total_duration / bg_music.duration) + 1
             bg_music = concatenate_audioclips([bg_music] * loops)
-        bg_music = bg_music.subclipped(0, total_duration).with_volume_scaled(BG_MUSIC_VOLUME)
+        bg_music = bg_music.subclipped(0, total_duration)
+        # Volume scale + professional fade-out (3 seconds) so it doesn't cut abruptly
+        from moviepy.audio.fx import AudioFadeOut
+        bg_music = bg_music.with_volume_scaled(BG_MUSIC_VOLUME).with_effects([AudioFadeOut(3)])
         audio_tracks.append(bg_music)
 
     final_audio = CompositeAudioClip(audio_tracks)
