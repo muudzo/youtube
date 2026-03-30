@@ -148,7 +148,24 @@ def upload_video(
     # Sanitize inputs — strip file paths, keys, or system info that could leak
     title = _sanitize_text(title)
     description = _sanitize_text(description)
-    tags = [_sanitize_text(t) for t in (tags or [])]
+
+    # Sanitize tags — YouTube rejects special chars, stopwords, and overly long tags
+    import re
+    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'is', 'it'}
+    clean_tags = []
+    for t in (tags or []):
+        t = re.sub(r'[^a-zA-Z0-9\s-]', '', _sanitize_text(t)).strip()
+        if len(t) > 2 and t.lower() not in stopwords and len(t) < 50:
+            clean_tags.append(t)
+    # Deduplicate and cap at 15
+    seen = set()
+    tags = []
+    for t in clean_tags:
+        if t.lower() not in seen:
+            seen.add(t.lower())
+            tags.append(t)
+        if len(tags) >= 15:
+            break
 
     if is_short and "#Shorts" not in title:
         title = f"{title} #Shorts"
