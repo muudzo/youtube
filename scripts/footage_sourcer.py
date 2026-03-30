@@ -21,13 +21,24 @@ from config import (
 )
 
 
+# Global set of Pexels video IDs already used in this pipeline run
+_used_video_ids = set()
+
+
+def reset_used_videos():
+    """Reset the dedup tracker — call at start of each new video."""
+    global _used_video_ids
+    _used_video_ids = set()
+
+
 def search_pexels_videos(query: str, per_page: int = 5) -> list:
-    """Search Pexels for stock videos matching a query."""
+    """Search Pexels for stock videos matching a query.
+    Deduplicates globally — same Pexels clip never appears twice in one video."""
     url = "https://api.pexels.com/videos/search"
     headers = {"Authorization": PEXELS_API_KEY}
     params = {
         "query": query,
-        "per_page": per_page,
+        "per_page": per_page + 5,  # fetch extra to account for dedup filtering
         "orientation": PEXELS_VIDEO_ORIENTATION,
         "size": PEXELS_VIDEO_SIZE,
     }
@@ -39,6 +50,12 @@ def search_pexels_videos(query: str, per_page: int = 5) -> list:
     videos = []
 
     for video in data.get("videos", []):
+        video_id = video["id"]
+
+        # Skip if already used in this video
+        if video_id in _used_video_ids:
+            continue
+
         duration = video.get("duration", 0)
         if duration < MIN_CLIP_DURATION:
             continue
@@ -54,14 +71,18 @@ def search_pexels_videos(query: str, per_page: int = 5) -> list:
             best_file = video_files[0]
 
         if best_file:
+            _used_video_ids.add(video_id)
             videos.append({
-                "id": video["id"],
+                "id": video_id,
                 "url": best_file["link"],
                 "width": best_file.get("width", 0),
                 "height": best_file.get("height", 0),
                 "duration": duration,
                 "query": query,
             })
+
+        if len(videos) >= per_page:
+            break
 
     return videos
 
@@ -139,7 +160,9 @@ def _detect_context(script: dict) -> list:
 def fetch_all_footage(script: dict) -> dict:
     """Fetch stock footage for all sections of a script.
     Returns dict mapping section index to list of video paths.
+    Deduplicates — no clip appears twice in the same video.
     """
+    reset_used_videos()  # fresh dedup for each video
     footage_map = {}
 
     # Detect cultural context for better footage matching

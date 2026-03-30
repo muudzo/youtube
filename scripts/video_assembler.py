@@ -210,12 +210,16 @@ def create_footage_sequence(footage_files: list, total_duration: float):
     target_clip_duration = 7.0
     num_clips_needed = max(1, int(total_duration / target_clip_duration))
 
-    # Shuffle clips for visual variety (stolen from MoneyPrinterTurbo)
-    # Instead of sequential order, randomize for more dynamic feel
+    # Shuffle clips for visual variety
     random.shuffle(usable)
+
+    # Deduplicate — never use the same clip file twice in one video
+    unique_clips = list(dict.fromkeys(str(f) for f in usable))
+    usable_unique = [Path(f) for f in unique_clips]
+
     selected = []
     for i in range(num_clips_needed):
-        selected.append(usable[i % len(usable)])
+        selected.append(usable_unique[i % len(usable_unique)])
 
     base_duration = total_duration / len(selected)
     print(f"  Using {len(selected)} clips at ~{base_duration:.1f}s avg")
