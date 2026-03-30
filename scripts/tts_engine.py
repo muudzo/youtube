@@ -14,16 +14,45 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import AUDIO_DIR, TTS_PROVIDER, EDGE_TTS_VOICE
 
 
+def _add_dramatic_ssml(text: str) -> str:
+    """Add SSML markup for dramatic narration — pauses, emphasis, pacing."""
+    import re
+
+    # Add pauses after ellipsis (dramatic beats)
+    text = re.sub(r'\.\.\.', '... <break time="800ms"/>', text)
+
+    # Add longer pause before "But" / "However" / "Then" (plot twists)
+    text = re.sub(r'([.!?])\s+(But |However |Then |Suddenly |What )',
+                  r'\1 <break time="600ms"/> \2', text)
+
+    # Add pause after questions (let it sink in)
+    text = re.sub(r'\?\s+', '? <break time="500ms"/> ', text)
+
+    # Slow down for emphasis on ALL CAPS words
+    def slow_caps(match):
+        word = match.group(0)
+        return f'<prosody rate="slow" pitch="-5%">{word.title()}</prosody>'
+    text = re.sub(r'\b[A-Z]{4,}\b', slow_caps, text)
+
+    # Add micro-pause before numbers/dates for weight
+    text = re.sub(r'(\s)(1[89]\d{2}|20[0-2]\d)(\b)', r'\1<break time="200ms"/>\2\3', text)
+
+    return text
+
+
 def tts_edge(text: str, output_path: Path, voice: str = None) -> Path:
-    """Generate speech using edge-tts (free, high quality)."""
+    """Generate speech using edge-tts with SSML for dramatic narration."""
     import edge_tts
 
     voice = voice or EDGE_TTS_VOICE
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Add dramatic SSML markup
+    dramatic_text = _add_dramatic_ssml(text)
+
     async def _generate():
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(dramatic_text, voice)
         await communicate.save(str(output_path))
 
     asyncio.run(_generate())
@@ -84,16 +113,24 @@ def generate_section_audio(sections: list, base_name: str, provider: str = None)
     return audio_files
 
 
-def combine_audio(audio_files: list, output_path: Path, pause_ms: int = 500) -> Path:
-    """Combine multiple audio files into one with pauses between them."""
+def combine_audio(audio_files: list, output_path: Path, pause_ms: int = 500, sections: list = None) -> Path:
+    """Combine multiple audio files with variable pauses — longer after cliffhangers."""
     combined = AudioSegment.empty()
-    pause = AudioSegment.silent(duration=pause_ms)
 
     for i, audio_file in enumerate(audio_files):
         segment = AudioSegment.from_file(str(audio_file))
         combined += segment
         if i < len(audio_files) - 1:
-            combined += pause
+            # Variable pause: check if section ends with a cliffhanger
+            section_pause = pause_ms
+            if sections and i < len(sections):
+                narration = sections[i].get("narration", "")
+                # Longer pause after questions, ellipsis, dramatic endings
+                if narration.rstrip().endswith(("?", "...", "!")):
+                    section_pause = 1200  # dramatic beat
+                elif any(w in narration.lower()[-50:] for w in ["dead", "gone", "never", "disappeared", "worse"]):
+                    section_pause = 900   # tension pause
+            combined += AudioSegment.silent(duration=section_pause)
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

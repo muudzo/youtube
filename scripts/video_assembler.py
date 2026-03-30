@@ -33,34 +33,68 @@ from config import (
     SUBTITLE_STROKE_COLOR,
     SUBTITLE_STROKE_WIDTH,
     SUBTITLE_POSITION,
+    SUBTITLE_BG_COLOR,
 )
 
 # ─── Brightness settings ──────────────────────────────────
 BRIGHTNESS_THRESHOLD = 60       # clips below this mean brightness are "dark"
 BRIGHTNESS_SAMPLE_COUNT = 5     # number of frames to sample per clip
-BRIGHTNESS_BOOST_FACTOR = 2.5   # multiplier applied to dark clips that we keep
+BRIGHTNESS_BOOST_FACTOR = 1.5   # subtle boost — 2.5 was washing out footage
 
 
-def ken_burns_zoom(clip, zoom_start=1.0, zoom_end=1.15):
-    """Apply subtle Ken Burns zoom effect — makes static footage feel alive."""
+def ken_burns_effect(clip, effect_type="zoom_in"):
+    """Apply varied Ken Burns effects — zoom in, zoom out, pan left, pan right.
+    Alternating effects prevents the video from feeling repetitive."""
     w, h = clip.size
+    from PIL import Image
 
-    def zoom_frame(get_frame, t):
+    if effect_type == "zoom_in":
+        zoom_start, zoom_end = 1.0, random.uniform(1.08, 1.15)
+    elif effect_type == "zoom_out":
+        zoom_start, zoom_end = random.uniform(1.08, 1.15), 1.0
+    elif effect_type == "pan_left":
+        zoom_start, zoom_end = 1.1, 1.1  # constant zoom, pan direction
+    elif effect_type == "pan_right":
+        zoom_start, zoom_end = 1.1, 1.1
+    else:
+        zoom_start, zoom_end = 1.0, 1.1
+
+    def motion_frame(get_frame, t):
         progress = t / max(clip.duration, 0.1)
         scale = zoom_start + (zoom_end - zoom_start) * progress
         frame = get_frame(t)
-        # Scale up the frame
         new_w, new_h = int(w * scale), int(h * scale)
-        from PIL import Image
         img = Image.fromarray(frame)
         img = img.resize((new_w, new_h), Image.LANCZOS)
-        # Center crop back to original size
-        left = (new_w - w) // 2
-        top = (new_h - h) // 2
+
+        # Calculate crop position based on effect type
+        if effect_type == "pan_left":
+            left = int((new_w - w) * (1 - progress))  # start right, move left
+            top = (new_h - h) // 2
+        elif effect_type == "pan_right":
+            left = int((new_w - w) * progress)  # start left, move right
+            top = (new_h - h) // 2
+        else:
+            left = (new_w - w) // 2
+            top = (new_h - h) // 2
+
         img = img.crop((left, top, left + w, top + h))
         return np.array(img)
 
-    return clip.transform(zoom_frame)
+    return clip.transform(motion_frame)
+
+
+# Cycle through effect types for visual variety
+_EFFECT_CYCLE = ["zoom_in", "pan_right", "zoom_out", "pan_left"]
+_effect_index = 0
+
+
+def get_next_effect():
+    """Get the next Ken Burns effect in rotation."""
+    global _effect_index
+    effect = _EFFECT_CYCLE[_effect_index % len(_EFFECT_CYCLE)]
+    _effect_index += 1
+    return effect
 
 
 def apply_transition(clip, fade_duration=0.5):
@@ -84,8 +118,8 @@ def load_and_resize_clip(video_path: Path, target_duration: float) -> VideoFileC
         loops_needed = int(target_duration / clip.duration) + 1
         clip = concatenate_videoclips([clip] * loops_needed).subclipped(0, target_duration)
 
-    # Apply Ken Burns zoom (subtle motion) + fade transitions
-    clip = ken_burns_zoom(clip, zoom_start=1.0, zoom_end=random.uniform(1.08, 1.18))
+    # Apply varied Ken Burns effect (zoom in, zoom out, pan L/R) + fade transitions
+    clip = ken_burns_effect(clip, effect_type=get_next_effect())
     clip = apply_transition(clip, fade_duration=0.4)
 
     return clip
@@ -171,8 +205,9 @@ def create_footage_sequence(footage_files: list, total_duration: float):
 
     needs_boost_set = set(str(p) for p in needs_boost)
 
-    # Use 5-10 second clips for a natural feel
-    target_clip_duration = 8.0
+    # Vary clip duration for pacing: 4-6s for tension, 8-10s for reflective moments
+    # Average around 7s — keeps it dynamic
+    target_clip_duration = 7.0
     num_clips_needed = max(1, int(total_duration / target_clip_duration))
 
     # Shuffle clips for visual variety (stolen from MoneyPrinterTurbo)
@@ -182,11 +217,14 @@ def create_footage_sequence(footage_files: list, total_duration: float):
     for i in range(num_clips_needed):
         selected.append(usable[i % len(usable)])
 
-    clip_duration = total_duration / len(selected)
-    print(f"  Using {len(selected)} clips at ~{clip_duration:.1f}s each")
+    base_duration = total_duration / len(selected)
+    print(f"  Using {len(selected)} clips at ~{base_duration:.1f}s avg")
 
     clips = []
-    for footage_path in selected:
+    for idx, footage_path in enumerate(selected):
+        # Vary pacing: alternate between fast (0.7x) and slow (1.3x) cuts
+        pace = random.choice([0.7, 0.85, 1.0, 1.0, 1.15, 1.3])
+        clip_duration = base_duration * pace
         try:
             clip = load_and_resize_clip(footage_path, clip_duration)
             # Apply brightness boost if this was a dark clip
@@ -225,26 +263,21 @@ def create_subtitle_clips(subtitles: list, video_size: tuple = None) -> list:
             continue
 
         try:
-            # Determine position — always use relative=True for fractional coords
-            if SUBTITLE_POSITION == "center":
-                pos = ("center", "center")
-                relative = False
-            else:
-                # bottom-ish placement
-                pos = ("center", 0.82)
-                relative = True
+            # Bottom-third placement — stops blocking the visuals
+            pos = ("center", 0.82)
+            relative = True
 
             txt_clip = (
                 TextClip(
-                    text=sub["text"],
+                    text=sub["text"].upper(),         # ALL CAPS for impact
                     font_size=SUBTITLE_FONT_SIZE,
                     color=SUBTITLE_FONT_COLOR,
-                    bg_color=None,                   # transparent background
+                    bg_color=SUBTITLE_BG_COLOR,       # semi-transparent dark box
                     stroke_color=SUBTITLE_STROKE_COLOR,
                     stroke_width=SUBTITLE_STROKE_WIDTH,
-                    font="Arial",
+                    font="Arial-Bold",                # Bold for readability
                     method="caption",
-                    size=(w - 200, None),
+                    size=(w - 300, None),              # slightly narrower
                     text_align="center",
                     transparent=True,
                 )

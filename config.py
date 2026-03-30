@@ -47,12 +47,13 @@ TARGET_VIDEO_LENGTH_MINUTES = 10  # aim for 8-15 min for algorithm
 WORDS_PER_MINUTE = 150  # narration pace
 
 # ─── Subtitle Settings ──────────────────────────────────
-SUBTITLE_FONT_SIZE = 60
+SUBTITLE_FONT_SIZE = 78           # bigger for mobile readability
 SUBTITLE_FONT_COLOR = "white"
 SUBTITLE_STROKE_COLOR = "black"
-SUBTITLE_STROKE_WIDTH = 3
-SUBTITLE_POSITION = "center"  # "bottom", "center"
-MAX_WORDS_PER_SUBTITLE = 5  # short punchy subtitles
+SUBTITLE_STROKE_WIDTH = 4
+SUBTITLE_POSITION = "bottom"      # bottom-third placement
+SUBTITLE_BG_COLOR = "rgba(0,0,0,0.6)"  # semi-transparent dark box
+MAX_WORDS_PER_SUBTITLE = 5       # short punchy subtitles
 
 # ─── Thumbnail Settings ─────────────────────────────────
 THUMBNAIL_WIDTH = 1280

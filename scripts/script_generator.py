@@ -91,15 +91,17 @@ def generate_script(topic: str, style: str = "documentary") -> dict:
     # Step 1: Check local research (Zim stories, etc.)
     local_research = _load_research(topic)
 
-    # Step 2: Auto-research online for ALL topics
+    # Step 2: ALWAYS research online — combine with local
     online_research = ""
-    if not local_research:
-        print("  Fact-checking online sources...")
-        online_brief = research_topic(topic)
-        if online_brief:
-            online_research = f"\n\nVERIFIED FACTS FROM ONLINE SOURCES — base your script on these, do NOT make up details:\n{online_brief}"
+    print("  Fact-checking online sources...")
+    online_brief = research_topic(topic)
+    if online_brief:
+        online_research = f"\n\nVERIFIED FACTS FROM ONLINE SOURCES — base your script on these, do NOT make up details:\n{online_brief}"
 
-    research = local_research or online_research
+    # Combine both sources
+    research = local_research + online_research
+    if not research.strip():
+        print("  WARNING: No verified facts found. Script quality may be low.")
 
     user_prompt = f"""Create a YouTube script about: {topic}
 
@@ -131,7 +133,7 @@ Respond with ONLY the JSON object, no markdown code blocks."""
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.8,
+        "temperature": 0.6,
         "max_tokens": 8192,
         "response_format": {"type": "json_object"},
     }
@@ -153,6 +155,64 @@ Respond with ONLY the JSON object, no markdown code blocks."""
     text = data["choices"][0]["message"]["content"]
 
     script = json.loads(text)
+
+    # ── Quality gate: reject scripts with no substance ──
+    script = _validate_and_sanitize(script, topic)
+
+    return script
+
+
+def _validate_and_sanitize(script: dict, topic: str) -> dict:
+    """Quality gate — reject filler, sanitize tags, validate descriptions."""
+    narration = get_full_narration(script)
+    words = narration.split()
+
+    # Check for filler phrases that signal the LLM had nothing real
+    filler_phrases = [
+        "we don't have verified",
+        "information is limited",
+        "details are scarce",
+        "according to some reports",
+        "the exact details remain unclear",
+        "not much is known",
+    ]
+    filler_count = sum(1 for phrase in filler_phrases if phrase in narration.lower())
+    if filler_count >= 3:
+        print(f"  WARNING: Script has {filler_count} filler phrases — low quality")
+
+    # Count specific facts (names, dates, places)
+    import re
+    # Dates like 1959, 2003, January, March etc.
+    dates = re.findall(r'\b(1[89]\d{2}|20[0-2]\d|January|February|March|April|May|June|July|August|September|October|November|December)\b', narration)
+    # Proper nouns (capitalized words not at start of sentence)
+    proper_nouns = re.findall(r'(?<!\. )\b[A-Z][a-z]{2,}\b', narration)
+
+    fact_score = len(dates) + len(set(proper_nouns)) // 3
+    if fact_score < 3:
+        print(f"  WARNING: Script has low fact density (score={fact_score}). May need better research.")
+
+    # Sanitize tags — strip special characters, remove stopwords, enforce min length
+    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'is', 'it'}
+    clean_tags = []
+    for tag in script.get("tags", []):
+        tag = re.sub(r'[^a-zA-Z0-9\s-]', '', str(tag)).strip()
+        if len(tag) > 2 and tag.lower() not in stopwords:
+            clean_tags.append(tag)
+    # Deduplicate and cap at 15
+    seen = set()
+    unique_tags = []
+    for t in clean_tags:
+        if t.lower() not in seen:
+            seen.add(t.lower())
+            unique_tags.append(t)
+    script["tags"] = unique_tags[:15]
+
+    # Sanitize description — remove hallucinated timestamps
+    desc = script.get("description", "")
+    desc = re.sub(r'\d{1,2}:\d{2}\s*[-–—]\s*', '', desc)  # Remove "10:45 - " style
+    desc = re.sub(r'extended trial balance', '', desc, flags=re.IGNORECASE)
+    script["description"] = desc.strip()
+
     return script
 
 
