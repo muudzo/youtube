@@ -154,18 +154,16 @@ def run_pipeline(
                 estimate_timestamps(short_narration, short_duration)
             )
 
-            # Pick bright footage
-            bright_footage = [f for f in footage_files
-                              if any(kw in str(f).lower() for kw in ["mountain", "landscape", "snowy", "hiking"])]
-            if not bright_footage:
-                bright_footage = footage_files[:6]
+            # Use all footage — Shorts generator handles brightness filtering + dedup
+            hook_text = hook_data.get("hook_text", "")
 
             short_path = VIDEO_DIR / f"{slug}_short.mp4"
             create_short(
                 audio_path=short_audio,
                 subtitles=short_subs,
-                footage_files=bright_footage[:6],
+                footage_files=footage_files[:15],  # give it more to choose from
                 output_path=short_path,
+                hook_text=hook_text,
             )
 
             short_thumb = THUMBNAIL_DIR / f"{slug}_short_thumb.png"

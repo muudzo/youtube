@@ -1,13 +1,20 @@
 """
-YouTube Shorts Generator — repurpose long-form content into 60s vertical clips.
-Extracts the hookiest parts of a script and renders 9:16 vertical video.
-ALL FREE — uses Groq for extraction. Compatible with MoviePy v2.
+YouTube Shorts Generator v2 — polished, high-retention vertical clips.
+- Fast cuts (3-5s per clip) for Shorts pacing
+- Ken Burns effects (zoom/pan) on every clip
+- Bold animated subtitles at bottom-third with highlight box
+- Hook text overlay in first 3 seconds
+- Brightness filtering — no dark clips
+- Fade transitions between clips
+- Professional feel that converts viewers to subscribers
 """
 
 import json
+import random
 import sys
 from pathlib import Path
 
+import numpy as np
 import requests
 from moviepy import (
     AudioFileClip,
@@ -16,7 +23,9 @@ from moviepy import (
     VideoFileClip,
     ColorClip,
     concatenate_videoclips,
+    vfx,
 )
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import (
@@ -50,8 +59,9 @@ def extract_hook_for_short(script: dict) -> dict:
             },
             {
                 "role": "user",
-                "content": f"""Pick the section that would make someone stop scrolling.
-Return JSON: {{"narration": "the 45-60 second narration", "visual_keywords": ["keyword1", "keyword2"]}}
+                "content": f"""Pick the section that would make someone STOP scrolling.
+The first sentence MUST be a jaw-dropping hook.
+Return JSON: {{"narration": "the 45-60 second narration", "visual_keywords": ["keyword1", "keyword2"], "hook_text": "2-5 word hook for text overlay"}}
 
 Script:
 {full_text}""",
@@ -69,48 +79,160 @@ Script:
     return json.loads(text)
 
 
+# ─── Ken Burns for vertical clips ──────────────────────
+_short_effect_idx = 0
+_SHORT_EFFECTS = ["zoom_in", "zoom_out", "pan_up", "pan_down"]
+
+
+def _short_ken_burns(clip, effect=None):
+    """Apply Ken Burns to a vertical clip — zoom or pan."""
+    global _short_effect_idx
+    if effect is None:
+        effect = _SHORT_EFFECTS[_short_effect_idx % len(_SHORT_EFFECTS)]
+        _short_effect_idx += 1
+
+    w, h = clip.size
+    scale = random.uniform(1.08, 1.15)
+
+    def motion(get_frame, t):
+        progress = t / max(clip.duration, 0.1)
+        if effect == "zoom_in":
+            s = 1.0 + (scale - 1.0) * progress
+        elif effect == "zoom_out":
+            s = scale - (scale - 1.0) * progress
+        else:
+            s = scale  # constant zoom for pan
+
+        frame = get_frame(t)
+        new_w, new_h = int(w * s), int(h * s)
+        img = Image.fromarray(frame).resize((new_w, new_h), Image.LANCZOS)
+
+        if effect == "pan_up":
+            left = (new_w - w) // 2
+            top = int((new_h - h) * (1 - progress))
+        elif effect == "pan_down":
+            left = (new_w - w) // 2
+            top = int((new_h - h) * progress)
+        else:
+            left = (new_w - w) // 2
+            top = (new_h - h) // 2
+
+        img = img.crop((left, top, left + w, top + h))
+        return np.array(img)
+
+    return clip.transform(motion)
+
+
+def _measure_brightness(clip):
+    """Quick brightness check — sample middle frame."""
+    try:
+        frame = clip.get_frame(clip.duration / 2)
+        return float(frame.mean())
+    except Exception:
+        return 0.0
+
+
+def _crop_to_vertical(clip):
+    """Crop a landscape clip to 9:16 vertical — center crop."""
+    target_ratio = SHORTS_WIDTH / SHORTS_HEIGHT  # 0.5625
+
+    if clip.w / clip.h > target_ratio:
+        # Wider than target — crop sides
+        clip = clip.resized(height=SHORTS_HEIGHT)
+        x_center = clip.w // 2
+        clip = clip.cropped(
+            x1=x_center - SHORTS_WIDTH // 2,
+            x2=x_center + SHORTS_WIDTH // 2,
+        )
+    else:
+        # Taller or equal — crop top/bottom
+        clip = clip.resized(width=SHORTS_WIDTH)
+        y_center = clip.h // 2
+        clip = clip.cropped(
+            y1=max(0, y_center - SHORTS_HEIGHT // 2),
+            y2=y_center + SHORTS_HEIGHT // 2,
+        )
+    return clip
+
+
 def create_short(
     audio_path: Path,
     subtitles: list,
     footage_files: list,
     output_path: Path,
+    hook_text: str = "",
 ) -> Path:
-    """Create a vertical 9:16 YouTube Short."""
+    """Create a polished vertical 9:16 YouTube Short."""
+    global _short_effect_idx
+    _short_effect_idx = 0
 
     narration = AudioFileClip(str(audio_path))
     duration = min(narration.duration, 59.0)
     narration = narration.subclipped(0, duration)
 
+    # ── Build footage sequence ────────────────────────
     if footage_files:
-        clip_dur = duration / max(len(footage_files), 1)
-        clips = []
+        # Filter dark clips
+        bright_files = []
         for fp in footage_files:
             try:
                 c = VideoFileClip(str(fp))
-                if c.w / c.h > SHORTS_WIDTH / SHORTS_HEIGHT:
-                    c = c.resized(height=SHORTS_HEIGHT)
-                    x_center = c.w // 2
-                    c = c.cropped(
-                        x1=x_center - SHORTS_WIDTH // 2,
-                        x2=x_center + SHORTS_WIDTH // 2,
-                    )
+                b = _measure_brightness(c)
+                c.close()
+                if b >= 55:
+                    bright_files.append(fp)
+            except Exception:
+                pass
+
+        if len(bright_files) < 3:
+            bright_files = footage_files  # fallback if too few bright
+
+        # Deduplicate
+        bright_files = list(dict.fromkeys(str(f) for f in bright_files))
+        random.shuffle(bright_files)
+
+        # Fast cuts for Shorts: 3-5 seconds per clip
+        clip_durations = []
+        remaining = duration
+        while remaining > 0:
+            d = random.uniform(3.0, 5.0)
+            d = min(d, remaining)
+            clip_durations.append(d)
+            remaining -= d
+
+        clips = []
+        for i, clip_dur in enumerate(clip_durations):
+            fp = bright_files[i % len(bright_files)]
+            try:
+                c = VideoFileClip(str(fp))
+                c = _crop_to_vertical(c)
+
+                # Random start point within the clip
+                if c.duration > clip_dur:
+                    max_start = c.duration - clip_dur
+                    start = random.uniform(0, max(0, max_start))
+                    c = c.subclipped(start, start + clip_dur)
                 else:
-                    c = c.resized(width=SHORTS_WIDTH)
-                    y_center = c.h // 2
-                    c = c.cropped(
-                        y1=y_center - SHORTS_HEIGHT // 2,
-                        y2=y_center + SHORTS_HEIGHT // 2,
-                    )
-                c = c.subclipped(0, min(c.duration, clip_dur))
+                    c = c.subclipped(0, min(c.duration, clip_dur))
+
+                # Apply Ken Burns effect
+                c = _short_ken_burns(c)
+
+                # Fade transition
+                if c.duration > 0.6:
+                    c = c.with_effects([vfx.FadeIn(0.3), vfx.FadeOut(0.3)])
+
                 clips.append(c)
             except Exception:
                 clips.append(
-                    ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (10, 10, 10), duration=clip_dur)
+                    ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (15, 15, 20), duration=clip_dur)
                 )
+
         video = concatenate_videoclips(clips).subclipped(0, duration)
     else:
-        video = ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (10, 10, 10), duration=duration)
+        video = ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (15, 15, 20), duration=duration)
 
+    # ── Subtitle overlays — bold, bottom-third, with bg box ──
     sub_clips = []
     for sub in subtitles:
         if sub["end"] > duration:
@@ -121,17 +243,19 @@ def create_short(
         try:
             txt = (
                 TextClip(
-                    text=sub["text"],
-                    font_size=72,
+                    text=sub["text"].upper(),
+                    font_size=85,
                     color="white",
+                    bg_color="rgba(0,0,0,0.65)",
                     stroke_color="black",
                     stroke_width=4,
-                    font="Arial",
+                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
                     method="caption",
-                    size=(SHORTS_WIDTH - 100, None),
+                    size=(SHORTS_WIDTH - 120, None),
                     text_align="center",
+                    transparent=True,
                 )
-                .with_position(("center", "center"))
+                .with_position(("center", 0.78), relative=True)
                 .with_start(sub["start"])
                 .with_duration(dur)
             )
@@ -139,7 +263,37 @@ def create_short(
         except Exception:
             pass
 
-    final = CompositeVideoClip([video] + sub_clips).with_audio(narration)
+    # ── Hook text overlay — big text in first 3 seconds ──
+    hook_overlays = []
+    if hook_text:
+        try:
+            hook_clip = (
+                TextClip(
+                    text=hook_text.upper(),
+                    font_size=110,
+                    color="#FFD700",  # gold
+                    stroke_color="black",
+                    stroke_width=5,
+                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    method="caption",
+                    size=(SHORTS_WIDTH - 80, None),
+                    text_align="center",
+                    transparent=True,
+                )
+                .with_position(("center", 0.25), relative=True)
+                .with_start(0)
+                .with_duration(3.0)
+                .with_effects([vfx.FadeIn(0.3), vfx.FadeOut(0.5)])
+            )
+            hook_overlays.append(hook_clip)
+        except Exception:
+            pass
+
+    # ── Compose everything ──────────────────────────────
+    final = CompositeVideoClip(
+        [video] + sub_clips + hook_overlays,
+        size=(SHORTS_WIDTH, SHORTS_HEIGHT),
+    ).with_audio(narration)
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -148,8 +302,9 @@ def create_short(
         fps=SHORTS_FPS,
         codec="libx264",
         audio_codec="aac",
-        bitrate="6000k",
+        bitrate="8000k",
         preset="medium",
+        threads=4,
     )
 
     final.close()
@@ -159,4 +314,4 @@ def create_short(
 
 
 if __name__ == "__main__":
-    print("Shorts generator ready. Use extract_hook_for_short() + create_short().")
+    print("Shorts generator v2 ready. Use extract_hook_for_short() + create_short().")
