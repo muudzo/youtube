@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 from config import VIDEO_DIR, AUDIO_DIR, SUBTITLE_DIR, THUMBNAIL_DIR, MUSIC_DIR
 from scripts.script_generator import generate_script, save_script, get_full_narration

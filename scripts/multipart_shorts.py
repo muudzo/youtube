@@ -11,8 +11,10 @@ import time
 from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+load_dotenv(override=True)
 from config import (
     GROQ_API_KEY,
     SCRIPT_MODEL,

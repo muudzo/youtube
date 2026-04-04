@@ -20,7 +20,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 from pipeline import run_pipeline
 

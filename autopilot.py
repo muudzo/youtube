@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 from pipeline import run_pipeline
 from scripts.topic_researcher import research_topics, save_topics

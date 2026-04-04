@@ -14,7 +14,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 from config import GROQ_API_KEY, SCRIPT_MODEL
 
 # Cache research to avoid re-fetching for the same topic

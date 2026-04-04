@@ -14,7 +14,7 @@ from typing import Optional, List
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from dotenv import load_dotenv; load_dotenv()
+from dotenv import load_dotenv; load_dotenv(override=True)
 from config import THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, THUMBNAIL_DIR, THUMBNAIL_FONT_SIZE, STOCK_DIR
 
 
