@@ -170,6 +170,80 @@ def brighten_clip(clip):
     return clip.image_transform(boost_image)
 
 
+def create_footage_sequence_longform(footage_files: list, total_duration: float):
+    """Denser footage sequence for long-form documentary videos.
+
+    Targets ~8-second average clip duration (vs 7s for standard) but with
+    more source clips to avoid repetition over a 10-12 minute runtime.
+    A 12-min video gets ~90 unique clip placements instead of ~30.
+    """
+    if not footage_files:
+        return ColorClip(
+            size=(VIDEO_WIDTH, VIDEO_HEIGHT),
+            color=(10, 10, 10),
+            duration=total_duration,
+        )
+
+    # Measure brightness
+    bright_clips = []
+    dark_clips = []
+    for f in footage_files:
+        brightness = measure_clip_brightness(f)
+        if brightness >= BRIGHTNESS_THRESHOLD:
+            bright_clips.append(f)
+        else:
+            dark_clips.append((f, brightness))
+
+    if len(bright_clips) >= 10:
+        usable = bright_clips
+        needs_boost = []
+    else:
+        usable = bright_clips + [f for f, _ in dark_clips]
+        needs_boost = [f for f, _ in dark_clips]
+
+    needs_boost_set = set(str(p) for p in needs_boost)
+
+    # Denser target: 8-second average cuts for documentary pacing.
+    # Documentary channels for 55+ use 1 clip per 6-10s — we sit at 8s.
+    target_clip_duration = 8.0
+    num_clips_needed = max(1, int(total_duration / target_clip_duration))
+    print(f"  Longform sequence: {num_clips_needed} clips at ~{target_clip_duration}s avg "
+          f"for {total_duration:.0f}s video")
+
+    random.shuffle(usable)
+    unique_clips = list(dict.fromkeys(str(f) for f in usable))
+    usable_unique = [Path(f) for f in unique_clips]
+
+    # If we don't have enough unique clips, allow reuse but space them out
+    selected = []
+    for i in range(num_clips_needed):
+        selected.append(usable_unique[i % len(usable_unique)])
+
+    base_duration = total_duration / len(selected)
+
+    clips = []
+    for footage_path in selected:
+        # Pacing variation — documentary rhythm, not TikTok rhythm
+        pace = random.choice([0.85, 0.9, 1.0, 1.0, 1.1, 1.15])
+        clip_duration = base_duration * pace
+        try:
+            clip = load_and_resize_clip(footage_path, clip_duration)
+            if str(footage_path) in needs_boost_set:
+                clip = brighten_clip(clip)
+            clips.append(clip)
+        except Exception as e:
+            print(f"  Warning: Failed to load {footage_path}: {e}")
+            clips.append(
+                ColorClip(
+                    size=(VIDEO_WIDTH, VIDEO_HEIGHT),
+                    color=(20, 20, 30),
+                    duration=clip_duration,
+                )
+            )
+
+    return concatenate_videoclips(clips)
+
+
 def create_footage_sequence(footage_files: list, total_duration: float):
     """Create a sequence of stock footage clips that fills the total duration."""
     if not footage_files:
@@ -294,6 +368,97 @@ def create_subtitle_clips(subtitles: list, video_size: tuple = None) -> list:
             print(f"  Warning: Failed to create subtitle clip: {e}")
 
     return subtitle_clips
+
+
+def assemble_longform_video(
+    footage_files: list,
+    audio_path: Path,
+    subtitles: list,
+    output_path: Path,
+    bg_music_path: Path = None,
+) -> Path:
+    """Long-form documentary assembler tuned for the 55+ TV audience.
+
+    Differences from assemble_video():
+      - Denser footage sequence (~8s avg cuts, more unique clips)
+      - BGM bed at -26 dB (0.05 volume) — louder than Shorts' -22 dB
+      - Slower fade-out (4s instead of 3s)
+      - Auto-detects BGM from assets/music/ if no explicit path given
+    """
+    print("Assembling LONG-FORM video (55+ tuned)...")
+
+    narration = AudioFileClip(str(audio_path))
+    total_duration = narration.duration
+    print(f"  Duration: {total_duration:.1f}s ({total_duration/60:.1f} min)")
+
+    print("  Building denser footage sequence...")
+    video = create_footage_sequence_longform(footage_files, total_duration)
+
+    print("  Adding subtitles (longform chunking)...")
+    subtitle_clips = create_subtitle_clips(subtitles, video_size=(VIDEO_WIDTH, VIDEO_HEIGHT))
+
+    final_video = CompositeVideoClip(
+        [video] + subtitle_clips,
+        size=(VIDEO_WIDTH, VIDEO_HEIGHT),
+    )
+
+    # ── Audio: narration + BGM bed at -26 dB ──
+    audio_tracks = [narration]
+
+    # Auto-detect BGM if no path provided
+    if bg_music_path is None:
+        music_dir = Path(__file__).parent.parent / "assets" / "music"
+        candidates = (
+            list(music_dir.glob("*.mp3"))
+            + list(music_dir.glob("*.m4a"))
+            + list(music_dir.glob("*.wav"))
+        )
+        if candidates:
+            bg_music_path = random.choice(candidates)
+            print(f"  Auto-detected BGM: {bg_music_path.name}")
+        else:
+            print("  No BGM in assets/music/ — rendering with narration only")
+            print("  TIP: drop a somber piano/strings .mp3 in assets/music/ for documentary feel")
+
+    if bg_music_path and Path(bg_music_path).exists():
+        bg_music = AudioFileClip(str(bg_music_path))
+        if bg_music.duration < total_duration:
+            loops = int(total_duration / bg_music.duration) + 1
+            bg_music = concatenate_audioclips([bg_music] * loops)
+        bg_music = bg_music.subclipped(0, total_duration)
+        # -26 dB ≈ 0.05 volume scale. Quieter than Shorts BGM since
+        # narration clarity is even more critical for 55+ on TV.
+        from moviepy.audio.fx import AudioFadeOut, AudioFadeIn
+        LONGFORM_BGM_VOLUME = 0.05  # -26 dB
+        bg_music = (
+            bg_music
+            .with_volume_scaled(LONGFORM_BGM_VOLUME)
+            .with_effects([AudioFadeIn(2.0), AudioFadeOut(4.0)])
+        )
+        audio_tracks.append(bg_music)
+
+    final_audio = CompositeAudioClip(audio_tracks)
+    final_video = final_video.with_audio(final_audio)
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    print(f"  Rendering to {output_path.name}...")
+    final_video.write_videofile(
+        str(output_path),
+        fps=FPS,
+        codec="libx264",
+        audio_codec="aac",
+        bitrate="8000k",
+        preset="medium",
+        threads=4,
+    )
+
+    final_video.close()
+    narration.close()
+
+    print(f"  Longform video saved: {output_path}")
+    return output_path
 
 
 def assemble_video(

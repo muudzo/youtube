@@ -49,6 +49,57 @@ def group_words_into_subtitles(words: list, max_words: int = None) -> list:
     return subtitles
 
 
+def group_words_for_longform(words: list, min_words: int = 5, max_words: int = 7,
+                              min_display_seconds: float = 1.8) -> list:
+    """Group words into longer subtitle chunks for long-form videos on TV.
+
+    55+ audiences watching on TV need larger chunks (5-7 words) with longer
+    display times (>= 1.8s) to read comfortably from 10 feet away. Breaks
+    chunks at natural punctuation boundaries when possible.
+    """
+    if not words:
+        return []
+
+    subtitles = []
+    i = 0
+    n = len(words)
+
+    # Punctuation that signals a natural break
+    break_chars = {".", "?", "!", ";", ":", ","}
+
+    while i < n:
+        # Take max_words, then shrink back to nearest punctuation if found
+        end = min(i + max_words, n)
+        chunk = words[i:end]
+
+        # If we haven't hit end of sequence, look for a punctuation break
+        # within the min/max range (prefer earlier breaks over later ones)
+        if end < n:
+            for j in range(len(chunk) - 1, min_words - 1, -1):
+                word_text = chunk[j]["word"]
+                if word_text and word_text[-1] in break_chars:
+                    chunk = chunk[: j + 1]
+                    end = i + j + 1
+                    break
+
+        # Ensure minimum display time — extend end time if too short
+        start_t = chunk[0]["start"]
+        end_t = chunk[-1]["end"]
+        if end_t - start_t < min_display_seconds and end < n:
+            # Hold the subtitle longer but don't overlap the next one
+            next_start = words[end]["start"]
+            end_t = min(start_t + min_display_seconds, next_start - 0.05)
+
+        subtitles.append({
+            "text": " ".join(w["word"] for w in chunk),
+            "start": round(start_t, 3),
+            "end": round(end_t, 3),
+        })
+        i = end
+
+    return subtitles
+
+
 def generate_srt(subtitles: list, output_path: Path) -> Path:
     """Generate an SRT subtitle file."""
     output_path = Path(output_path)

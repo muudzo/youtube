@@ -34,7 +34,7 @@ from config import GROQ_API_KEY, SCRIPT_MODEL
 LONGFORM_SYSTEM_PROMPT = """You are a documentary scriptwriter for a YouTube
 channel whose audience is 100% age 55+, mostly 65+ males watching on TV apps.
 
-You write narrated long-form documentaries — 12-15 minutes, 1800-2200 words.
+You write narrated long-form documentaries — 10-12 minutes, 1500-1800 words.
 NOT stretched Shorts. These are proper narrative arcs with chapter beats.
 
 AUDIENCE PRINCIPLES:
@@ -42,37 +42,47 @@ AUDIENCE PRINCIPLES:
 - They value respectful pacing — NOT condescension. They are not slow.
 - They tolerate longer emotional buildup if the payoff is real
 - They dislike manipulation, fake urgency, Gen Z slang, and TikTok energy
+- They clicked intentionally from a thumbnail — they are NOT scroll-deciding.
+  Do NOT open with "you won't believe" style hooks. That signals clickbait
+  and 55+ distrusts clickbait.
 - They relate to stories about long marriages, adult children, inheritance,
   aging parents, regret, and reconciliation
 - They watch on TV — the video must feel like an evening documentary
 
-STRUCTURE (6 acts — STRICT WORD COUNTS, THIS IS NOT OPTIONAL):
+OPENING LINE RULES (Act 1 first sentence):
+- Open with a clear, specific statement. Name a person, a year, a place.
+- Example: "In 1986, Margaret Wilson married a man she believed she knew
+  completely." or "James Atwood retired from the railroad in the spring
+  of 2019, at the age of 66."
+- Do NOT open with a question, a tease, or "what happened next"
 
-Act 1 — Setup — MINIMUM 320 WORDS: Introduce the people, the era, the
-        long relationship. Establish what seemed normal for decades. No
-        hook tricks. Use specific years, ages, cities, jobs. Describe
-        the texture of their life together in detail.
+STRUCTURE (6 acts — STRICT WORD COUNTS):
 
-Act 2 — Inconsistencies — MINIMUM 280 WORDS: Walk through subtle tells
+Act 1 — Setup — MINIMUM 280 WORDS: Introduce the people, the era, the
+        long relationship. Establish what seemed normal for decades.
+        Use specific years, ages, cities, jobs. Describe the texture of
+        their life together in detail.
+
+Act 2 — Inconsistencies — MINIMUM 240 WORDS: Walk through subtle tells
         year by year. Small things that didn't add up. Moments ignored
         in the moment. Give at least 4-5 concrete examples.
 
-Act 3 — Discovery — MINIMUM 380 WORDS: The precise moment it all came
+Act 3 — Discovery — MINIMUM 320 WORDS: The precise moment it all came
         out. Slow this down. Describe what was on the table, what the
         weather was, what she was holding. Let it land.
 
-Act 4 — Confrontation — MINIMUM 320 WORDS: The scene where it's spoken
+Act 4 — Confrontation — MINIMUM 260 WORDS: The scene where it's spoken
         aloud. Use real dialogue in at least 3 exchanges. Show silences.
 
-Act 5 — Fallout — MINIMUM 280 WORDS: Children on both sides, their
+Act 5 — Fallout — MINIMUM 220 WORDS: Children on both sides, their
         reactions, money, legal, friends, the wider circle.
 
-Act 6 — Reflection — MINIMUM 220 WORDS: What remained one year later.
+Act 6 — Reflection — MINIMUM 180 WORDS: What remained one year later.
         What was learned. Resolution, not sequel tease.
 
-TOTAL TARGET: 1800-2200 words across all six acts combined.
-If your draft is under 1800 words TOTAL, you have failed the task and
-must expand. Count your words before returning.
+TOTAL TARGET: 1500-1800 words across all six acts combined.
+If your draft is under 1500 words TOTAL, you have failed the task.
+Count your words before returning.
 
 LANGUAGE RULES:
 - Narration reads naturally aloud at 0.9x speech pacing
@@ -156,6 +166,67 @@ TOPIC: {topic}
         script["hook"] = first_narration.split(".")[0] + "."
 
     return script
+
+
+def _format_timestamp(seconds: float) -> str:
+    """Format seconds as YouTube chapter timestamp (00:00 or 00:00:00)."""
+    total = int(seconds)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def build_chapters_description(script: dict, section_durations: list) -> str:
+    """Build a YouTube description with chapter markers.
+
+    YouTube requires:
+      - First timestamp must be 00:00
+      - Minimum 3 chapters
+      - Each chapter minimum 10 seconds
+      - Timestamps in ascending order
+
+    Args:
+      script: the generated longform script (with sections)
+      section_durations: list of durations in seconds, one per section
+
+    Returns the full description string with chapters appended.
+    """
+    sections = script.get("sections", [])
+    if not sections or len(sections) < 3:
+        return script.get("description", "")
+
+    # Chapter labels — human-readable, not "Act 1"
+    DEFAULT_LABELS = [
+        "The Setup",
+        "The Warning Signs",
+        "The Discovery",
+        "The Confrontation",
+        "The Fallout",
+        "What Remained",
+    ]
+
+    chapters = []
+    current = 0.0
+    for i, sec in enumerate(sections):
+        label = DEFAULT_LABELS[i] if i < len(DEFAULT_LABELS) else sec.get("section_title", f"Part {i+1}")
+        chapters.append(f"{_format_timestamp(current)} {label}")
+        current += section_durations[i] if i < len(section_durations) else 0
+
+    base_desc = script.get("description", "") or ""
+    chapter_block = "\n".join(chapters)
+
+    tags_block = ""
+    if script.get("tags"):
+        hashtags = " ".join(f"#{t.replace(' ', '')}" for t in script["tags"][:5])
+        tags_block = f"\n\n{hashtags}"
+
+    cta = ("\n\nIf this story moved you, please subscribe for more "
+           "real stories of marriage, betrayal, and the truths that emerge "
+           "after a lifetime. New stories every week.")
+
+    return f"{base_desc}\n\nCHAPTERS\n{chapter_block}{cta}{tags_block}"
 
 
 if __name__ == "__main__":
