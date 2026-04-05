@@ -170,6 +170,16 @@ def create_short(
     duration = min(narration.duration, 59.0)
     narration = narration.subclipped(0, duration)
 
+    # ── Text-only impact frame — first 1.5s is a dark screen
+    # with giant hook text to stop the scroll BEFORE footage begins.
+    # This directly fights swipe-away in the first 1-2 seconds.
+    IMPACT_DURATION = 1.5
+    impact_bg = ColorClip(
+        (SHORTS_WIDTH, SHORTS_HEIGHT), (8, 8, 12), duration=IMPACT_DURATION
+    )
+
+    footage_duration = max(0.1, duration - IMPACT_DURATION)
+
     # ── Build footage sequence ────────────────────────
     if footage_files:
         # Filter dark clips
@@ -193,7 +203,7 @@ def create_short(
 
         # Fast cuts for Shorts: 3-5 seconds per clip
         clip_durations = []
-        remaining = duration
+        remaining = footage_duration
         while remaining > 0:
             d = random.uniform(3.0, 5.0)
             d = min(d, remaining)
@@ -228,7 +238,8 @@ def create_short(
                     ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (15, 15, 20), duration=clip_dur)
                 )
 
-        video = concatenate_videoclips(clips).subclipped(0, duration)
+        footage_seq = concatenate_videoclips(clips).subclipped(0, footage_duration)
+        video = concatenate_videoclips([impact_bg, footage_seq]).subclipped(0, duration)
     else:
         video = ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (15, 15, 20), duration=duration)
 
@@ -263,29 +274,52 @@ def create_short(
         except Exception:
             pass
 
-    # ── Hook text overlay — big text in first 3 seconds ──
+    # ── Hook text overlay — GIANT impact text during text-only intro,
+    # then a smaller sustain version once footage begins.
     hook_overlays = []
     if hook_text:
         try:
-            hook_clip = (
+            # 1) Giant centered impact text during the dark intro (0 → 1.5s)
+            impact_clip = (
                 TextClip(
                     text=hook_text.upper(),
-                    font_size=110,
+                    font_size=150,
                     color="#FFD700",  # gold
+                    stroke_color="black",
+                    stroke_width=6,
+                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    method="caption",
+                    size=(SHORTS_WIDTH - 60, None),
+                    text_align="center",
+                    transparent=True,
+                )
+                .with_position("center")
+                .with_start(0)
+                .with_duration(IMPACT_DURATION)
+                .with_effects([vfx.FadeIn(0.15)])
+            )
+            hook_overlays.append(impact_clip)
+
+            # 2) Smaller sustain hook once footage appears (1.5 → 3.0s)
+            sustain_clip = (
+                TextClip(
+                    text=hook_text.upper(),
+                    font_size=95,
+                    color="#FFD700",
                     stroke_color="black",
                     stroke_width=5,
                     font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
                     method="caption",
-                    size=(SHORTS_WIDTH - 80, None),
+                    size=(SHORTS_WIDTH - 100, None),
                     text_align="center",
                     transparent=True,
                 )
-                .with_position(("center", 0.25), relative=True)
-                .with_start(0)
-                .with_duration(3.0)
-                .with_effects([vfx.FadeIn(0.3), vfx.FadeOut(0.5)])
+                .with_position(("center", 0.22), relative=True)
+                .with_start(IMPACT_DURATION)
+                .with_duration(1.5)
+                .with_effects([vfx.FadeIn(0.2), vfx.FadeOut(0.4)])
             )
-            hook_overlays.append(hook_clip)
+            hook_overlays.append(sustain_clip)
         except Exception:
             pass
 
