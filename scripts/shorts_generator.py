@@ -201,11 +201,13 @@ def create_short(
         bright_files = list(dict.fromkeys(str(f) for f in bright_files))
         random.shuffle(bright_files)
 
-        # Fast cuts for Shorts: 3-5 seconds per clip
+        # Measured cuts for 55+ audience: 5-8 seconds per clip.
+        # Older viewers need more time per visual to reduce cognitive load —
+        # faster cuts (3-5s) were tanking retention.
         clip_durations = []
         remaining = footage_duration
         while remaining > 0:
-            d = random.uniform(3.0, 5.0)
+            d = random.uniform(5.0, 8.0)
             d = min(d, remaining)
             clip_durations.append(d)
             remaining -= d

@@ -124,31 +124,128 @@ def search_hacker_news(query: str, limit: int = 10) -> list:
     ]
 
 
+# ── Theme multipliers for 4kMUDZO's actual audience (100% age 55+, 72% male)
+# These are resonance boosts, not hard filters — they nudge the generator toward
+# themes that historically convert for this demographic without killing outliers.
+AGE_55_PLUS_THEMES = {
+    "long_marriage":           1.25,  # 20+ year marriages, decades-long relationships
+    "inheritance_dispute":     1.30,  # wills, estates, family money
+    "adult_children_conflict": 1.20,  # grown kids, family fractures
+    "late_life_betrayal":      1.35,  # discoveries after decades
+    "retirement_finance":      1.20,  # retirement, savings, late-life money
+    "aging_parents":           1.25,  # elder care, parent-child inversions
+    "regret_reconciliation":   1.30,  # deathbed, reunion, lifelong regret
+    "lifelong_secret":         1.30,  # 20+ years of hidden truth
+    "moral_justice":           1.15,  # karma, consequences, eventual justice
+}
+
+YOUTH_LEANING_THEMES = {
+    "dating_drama":            0.80,
+    "college_relationships":   0.75,
+    "social_media_conflict":   0.70,
+    "viral_trend_hook":        0.85,
+    "gen_z_slang":             0.70,
+}
+
+
+def classify_themes(text: str) -> list:
+    """Detect which themes apply to a post. Returns a list of theme tags.
+    A single post can match multiple themes."""
+    import re as _re
+    t = text.lower()
+    tags = []
+
+    # Long marriage — explicit multi-decade relationship
+    years = [int(y) for y in _re.findall(r"(\d+)\s*year", t)]
+    long_years = any(y >= 20 for y in years)
+    very_long_years = any(y >= 35 for y in years)
+
+    marriage_terms = ["husband", "wife", "marriage", "married", "spouse"]
+    if long_years and any(w in t for w in marriage_terms):
+        tags.append("long_marriage")
+    if very_long_years:
+        tags.append("lifelong_secret")
+
+    # Inheritance / estate
+    if any(w in t for w in ["inheritance", "will", "estate", "heir", "widow", "widower"]):
+        tags.append("inheritance_dispute")
+
+    # Adult children conflict
+    if any(w in t for w in ["adult son", "adult daughter", "grown son", "grown daughter",
+                             "her children", "his children", "my kids"]):
+        tags.append("adult_children_conflict")
+
+    # Late-life betrayal — discovery after long time
+    if any(phrase in t for phrase in ["after decades", "after 20 years", "after 30 years",
+                                        "after 40 years", "for years", "all along",
+                                        "never told", "kept secret"]):
+        tags.append("late_life_betrayal")
+
+    # Retirement / late-life finance
+    if any(w in t for w in ["retirement", "pension", "retired", "savings", "401k"]):
+        tags.append("retirement_finance")
+
+    # Aging parents
+    if any(w in t for w in ["aging parent", "elderly mother", "elderly father",
+                              "caring for", "dementia", "nursing home", "hospice"]):
+        tags.append("aging_parents")
+
+    # Regret / reconciliation
+    if any(w in t for w in ["regret", "deathbed", "funeral", "reconciled",
+                              "last wish", "reunion", "before she died", "before he died"]):
+        tags.append("regret_reconciliation")
+
+    # Moral justice
+    if any(w in t for w in ["karma", "justice", "finally paid", "consequences",
+                              "got what he deserved", "got what she deserved"]):
+        tags.append("moral_justice")
+
+    # Youth-leaning (negative)
+    if any(w in t for w in ["tiktok", "instagram", "snapchat", "viral", "trending"]):
+        tags.append("social_media_conflict")
+    if any(w in t for w in ["college", "dorm", "roommate", "university"]):
+        tags.append("college_relationships")
+    if any(w in t for w in ["dating app", "tinder", "hinge", "bumble", "swipe"]):
+        tags.append("dating_drama")
+
+    return tags
+
+
 def score_topic(post: dict) -> float:
-    """Score a topic by proven engagement — higher = more likely to perform on YouTube.
-    Formula: relevance (45%) + engagement (30%) + virality (25%)"""
+    """Score a topic: base virality × theme resonance multipliers.
+
+    Base score comes from Reddit engagement signals. Theme multipliers
+    nudge toward 55+ resonance without hard-filtering outliers.
+    """
     score = post.get("score", 0)
     comments = post.get("comments", 0)
     upvote_ratio = post.get("upvote_ratio", 0.5)
 
-    # Engagement score (normalized)
-    engagement = min(score / 1000, 1.0) * 0.30
-
-    # Comment activity = strong signal of discussion-worthy content
+    # ── Base score (preserves the original virality signal)
+    engagement = min(score / 1000, 1.0) * 0.35
     discussion = min(comments / 200, 1.0) * 0.25
-
-    # Upvote ratio — controversial posts (0.6-0.8) actually perform well on YouTube
     controversy_bonus = 0.15 if 0.6 <= upvote_ratio <= 0.85 else 0.05
 
-    # Title quality — does it have a hook?
     title = post.get("title", "").lower()
-    hook_words = ["never", "secret", "found", "discovered", "worst", "killed",
-                  "disappeared", "betrayed", "revenge", "nobody", "truth",
-                  "insane", "terrifying", "shocking", "caught", "destroyed"]
-    hook_score = sum(0.05 for w in hook_words if w in title)
-    hook_score = min(hook_score, 0.25)
+    hook_words = ["secret", "found", "discovered", "betrayed", "revenge",
+                  "truth", "caught", "destroyed", "hidden", "lied"]
+    hook_score = min(sum(0.03 for w in hook_words if w in title), 0.25)
 
-    return engagement + discussion + controversy_bonus + hook_score
+    base_score = engagement + discussion + controversy_bonus + hook_score
+
+    # ── Apply theme multipliers
+    text = post.get("title", "") + " " + post.get("selftext", "")
+    tags = classify_themes(text)
+    post["themes"] = tags  # store for debugging / downstream use
+
+    score_out = base_score
+    for tag in tags:
+        if tag in AGE_55_PLUS_THEMES:
+            score_out *= AGE_55_PLUS_THEMES[tag]
+        elif tag in YOUTH_LEANING_THEMES:
+            score_out *= YOUTH_LEANING_THEMES[tag]
+
+    return score_out
 
 
 def discover_topics(niche: str = "all", limit: int = 20) -> list:
