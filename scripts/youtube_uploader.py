@@ -34,7 +34,12 @@ SCOPES = [
 ]
 
 CLIENT_SECRET_FILE = BASE_DIR / "client_secret.json"
-TOKEN_FILE = BASE_DIR / "token.json"
+
+# Which channel this process uploads to. One OAuth token authorises exactly one
+# channel, so a second channel needs its own token file — otherwise the Dutch
+# daemon would publish onto the English channel. brainrot.py sets
+# YOUTUBE_TOKEN_FILE=token_nl.json before any upload happens.
+TOKEN_FILE = BASE_DIR / os.getenv("YOUTUBE_TOKEN_FILE", "token.json")
 
 
 def _sanitize_text(text: str) -> str:
@@ -126,6 +131,8 @@ def upload_video(
     privacy: str = "public",
     is_short: bool = False,
     publish_at: str = None,
+    synthetic_media: bool = False,
+    language: str = None,
 ) -> str:
     """
     Upload a video to YouTube.
@@ -139,6 +146,13 @@ def upload_video(
         privacy: "public", "unlisted", or "private"
         is_short: If True, adds #Shorts to title
         publish_at: ISO 8601 datetime for scheduled publish (e.g. "2026-03-25T15:00:00Z")
+        synthetic_media: Declares altered/synthetic content via
+            status.containsSyntheticMedia. Set this whenever the narration is
+            AI-generated — undisclosed synthetic content is the fastest route
+            to an inauthentic-content strike.
+        language: BCP-47 code (e.g. "nl") set as both the video's default
+            language and its default audio language, so YouTube surfaces it to
+            the right audience instead of guessing from an English-heavy channel.
 
     Returns:
         Video ID of the uploaded video
@@ -188,6 +202,13 @@ def upload_video(
             "selfDeclaredMadeForKids": False,
         },
     }
+
+    if language:
+        body["snippet"]["defaultLanguage"] = language
+        body["snippet"]["defaultAudioLanguage"] = language
+
+    if synthetic_media:
+        body["status"]["containsSyntheticMedia"] = True
 
     # Schedule for later if publish_at is set
     if publish_at:
@@ -250,8 +271,14 @@ def upload_with_thumbnail(
     privacy: str = "public",
     is_short: bool = False,
     publish_at: str = None,
+    synthetic_media: bool = False,
+    language: str = None,
 ) -> str:
-    """Upload a video and set its custom thumbnail."""
+    """Upload a video and set its custom thumbnail.
+
+    ``synthetic_media`` and ``language`` are forwarded to upload_video; see
+    its docstring.
+    """
     video_id = upload_video(
         video_path=video_path,
         title=title,
@@ -261,6 +288,8 @@ def upload_with_thumbnail(
         privacy=privacy,
         is_short=is_short,
         publish_at=publish_at,
+        synthetic_media=synthetic_media,
+        language=language,
     )
 
     # Wait a moment for YouTube to process

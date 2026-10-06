@@ -21,7 +21,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-from config import VIDEO_DIR, AUDIO_DIR, SUBTITLE_DIR, THUMBNAIL_DIR, MUSIC_DIR
+from config import (
+    VIDEO_DIR,
+    AUDIO_DIR,
+    SUBTITLE_DIR,
+    THUMBNAIL_DIR,
+    MUSIC_DIR,
+    KEEP_LOCAL_AFTER_UPLOAD,
+)
+from scripts.cleanup import purge_artifacts
 from scripts.script_generator import generate_script, save_script, get_full_narration
 from scripts.tts_engine import generate_audio, generate_section_audio, combine_audio, get_audio_duration
 from scripts.footage_sourcer import fetch_all_footage
@@ -45,8 +53,16 @@ def run_pipeline(
     upload_short: bool = False,
     privacy: str = "public",
     schedule: str = None,
+    keep_local: bool = None,
 ):
-    """Run the full video pipeline from topic to finished video."""
+    """Run the full video pipeline from topic to finished video.
+
+    When ``upload`` succeeds, local artifacts (render, audio, subtitles,
+    thumbnails, downloaded footage) are deleted unless ``keep_local`` is set.
+    ``keep_local=None`` falls back to the KEEP_LOCAL_AFTER_UPLOAD config flag.
+    """
+    if keep_local is None:
+        keep_local = KEEP_LOCAL_AFTER_UPLOAD
     slug = slugify(topic)
     print("=" * 60)
     print(f"  FACELESS YOUTUBE PIPELINE")
@@ -241,6 +257,25 @@ def run_pipeline(
     print(f"\n  Tags: {', '.join(script.get('tags', []))}")
     print("=" * 60)
 
+    # ─── Step 8: Purge local artifacts after a confirmed upload ──
+    # Only runs once the long-form is safely on YouTube. If the Short was
+    # rendered but its upload failed, keep the Short mp4 + audio so it can be
+    # retried (e.g. by cron/upload_short.sh); everything else is removed.
+    if not keep_local and uploaded.get("video_id"):
+        keep_short_files = short_path is not None and not uploaded.get("short_id")
+
+        artifacts = [output_video, thumbnail]
+        artifacts += list(SUBTITLE_DIR.glob(f"{slug}_subs*"))
+        for audio in AUDIO_DIR.glob(f"{slug}*.mp3"):
+            if keep_short_files and audio.name == f"{slug}_short.mp3":
+                continue
+            artifacts.append(audio)
+        if not keep_short_files:
+            artifacts += [short_path, short_thumb]
+
+        print("\n[8/8] Cleaning up local files (already uploaded)...")
+        purge_artifacts(artifacts, footage_files)
+
     result = {
         "title": script["title"],
         "description": script.get("description", ""),
@@ -287,6 +322,8 @@ def main():
     parser.add_argument("--short", action="store_true", help="Also generate + upload a Short")
     parser.add_argument("--privacy", choices=["public", "unlisted", "private"], default="public")
     parser.add_argument("--schedule", help="Schedule publish (ISO 8601: 2026-03-25T15:00:00Z)")
+    parser.add_argument("--keep-local", action="store_true",
+                        help="Keep local files after upload (default: delete to save space)")
 
     args = parser.parse_args()
 
@@ -300,6 +337,7 @@ def main():
         upload_short=args.short,
         privacy=args.privacy,
         schedule=args.schedule,
+        keep_local=args.keep_local if args.keep_local else None,
     )
 
 

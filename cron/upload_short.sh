@@ -1,9 +1,15 @@
 #!/bin/zsh
-cd /Users/tatendanyemudzo/youtube
-export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
-/usr/bin/python3 -c "
+# Manual: re-upload the most recent Short that's still on disk.
+# Useful when a daemon run rendered a Short but its upload failed (the Short
+# mp4 is kept on disk in that case).
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_DIR"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+[ -f "$REPO_DIR/.env" ] && { set -a; source "$REPO_DIR/.env"; set +a; }
+PY="$REPO_DIR/.venv/bin/python"
+"$PY" -c "
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 from pathlib import Path
 from scripts.youtube_uploader import upload_video
 import glob, json

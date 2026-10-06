@@ -244,8 +244,13 @@ def create_footage_sequence_longform(footage_files: list, total_duration: float)
     return concatenate_videoclips(clips)
 
 
-def create_footage_sequence(footage_files: list, total_duration: float):
-    """Create a sequence of stock footage clips that fills the total duration."""
+def create_footage_sequence(footage_files: list, total_duration: float,
+                            target_clip_duration: float = None):
+    """Create a sequence of stock footage clips that fills the total duration.
+
+    ``target_clip_duration`` overrides the default 7s cut length so callers can
+    vary cut rhythm per video (see scripts/nl/variation.PacingProfile).
+    """
     if not footage_files:
         return ColorClip(
             size=(VIDEO_WIDTH, VIDEO_HEIGHT),
@@ -281,7 +286,7 @@ def create_footage_sequence(footage_files: list, total_duration: float):
 
     # Vary clip duration for pacing: 4-6s for tension, 8-10s for reflective moments
     # Average around 7s — keeps it dynamic
-    target_clip_duration = 7.0
+    target_clip_duration = target_clip_duration or 7.0
     num_clips_needed = max(1, int(total_duration / target_clip_duration))
 
     # Shuffle clips for visual variety
@@ -322,7 +327,38 @@ def create_footage_sequence(footage_files: list, total_duration: float):
     return concatenate_videoclips(clips)
 
 
-def create_subtitle_clips(subtitles: list, video_size: tuple = None) -> list:
+# Headroom added to a caption bitmap, as a fraction of font size. MoviePy's
+# method="caption" with size=(W, None) returns a bitmap marginally SHORTER than
+# the font size itself (84px for an 85px font), so glyph descenders and the
+# stroke are cut off inside the clip's own bounds. Measuring the auto height and
+# re-creating with headroom fixes it and survives multi-line wrapping.
+CAPTION_HEADROOM = 0.6
+
+
+def caption_box_size(text: str, font: str, font_size: int, stroke_width: int,
+                     max_width: int) -> tuple:
+    """Return a (width, height) that fits `text` without clipping its glyphs."""
+    probe = TextClip(
+        text=text,
+        font_size=font_size,
+        color="white",
+        stroke_width=stroke_width,
+        font=font,
+        method="caption",
+        size=(max_width, None),
+        text_align="center",
+        transparent=True,
+    )
+    auto_height = probe.size[1]
+    try:
+        probe.close()
+    except Exception:
+        pass
+    return max_width, auto_height + int(font_size * CAPTION_HEADROOM)
+
+
+def create_subtitle_clips(subtitles: list, video_size: tuple = None,
+                          style=None) -> list:
     """Create TextClip overlays for each subtitle.
 
     MoviePy v2 notes:
@@ -330,10 +366,22 @@ def create_subtitle_clips(subtitles: list, video_size: tuple = None) -> list:
       positioning; without relative=True the float is treated as pixel offset.
     - method='caption' wraps text within `size` width; 'label' does not wrap.
     - font='Arial' works on macOS (system font).
+
+    ``style`` is an optional per-video caption treatment (see
+    scripts/nl/variation.CaptionStyle) with font_size / position / color /
+    stroke_width / uppercase / box attributes. When omitted the config
+    defaults apply, so existing callers are unaffected.
     """
     subtitle_clips = []
     w = video_size[0] if video_size else VIDEO_WIDTH
     h = video_size[1] if video_size else VIDEO_HEIGHT
+
+    font_size = getattr(style, "font_size", SUBTITLE_FONT_SIZE)
+    color = getattr(style, "color", SUBTITLE_FONT_COLOR)
+    stroke_width = getattr(style, "stroke_width", SUBTITLE_STROKE_WIDTH)
+    y_pos = getattr(style, "position", 0.82)
+    uppercase = getattr(style, "uppercase", True)
+    bg_color = SUBTITLE_BG_COLOR if getattr(style, "box", True) else None
 
     for sub in subtitles:
         duration = sub["end"] - sub["start"]
@@ -341,21 +389,26 @@ def create_subtitle_clips(subtitles: list, video_size: tuple = None) -> list:
             continue
 
         try:
-            # Bottom-third placement — stops blocking the visuals
-            pos = ("center", 0.82)
+            # Bottom-third by default — stops blocking the visuals
+            pos = ("center", y_pos)
             relative = True
+
+            caption_text = sub["text"].upper() if uppercase else sub["text"]
+            font_path = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+            box = caption_box_size(caption_text, font_path, font_size,
+                                   stroke_width, w - 300)
 
             txt_clip = (
                 TextClip(
-                    text=sub["text"].upper(),         # ALL CAPS for impact
-                    font_size=SUBTITLE_FONT_SIZE,
-                    color=SUBTITLE_FONT_COLOR,
-                    bg_color=SUBTITLE_BG_COLOR,       # semi-transparent dark box
+                    text=caption_text,
+                    font_size=font_size,
+                    color=color,
+                    bg_color=bg_color,                # semi-transparent dark box
                     stroke_color=SUBTITLE_STROKE_COLOR,
-                    stroke_width=SUBTITLE_STROKE_WIDTH,
-                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    stroke_width=stroke_width,
+                    font=font_path,
                     method="caption",
-                    size=(w - 300, None),              # slightly narrower
+                    size=box,
                     text_align="center",
                     transparent=True,
                 )
@@ -467,8 +520,15 @@ def assemble_video(
     subtitles: list,
     output_path: Path,
     bg_music_path: Path = None,
+    caption_style=None,
+    target_clip_duration: float = None,
 ) -> Path:
-    """Assemble the final video from all components."""
+    """Assemble the final video from all components.
+
+    ``caption_style`` and ``target_clip_duration`` are optional per-video
+    overrides used by the Dutch pipeline to vary caption treatment and cut
+    rhythm across uploads. Both default to the previous fixed behaviour.
+    """
     print("Assembling video...")
 
     # Load narration audio
@@ -478,11 +538,13 @@ def assemble_video(
 
     # Create footage sequence
     print("  Building footage sequence...")
-    video = create_footage_sequence(footage_files, total_duration)
+    video = create_footage_sequence(footage_files, total_duration,
+                                    target_clip_duration=target_clip_duration)
 
     # Create subtitle overlays
     print("  Adding subtitles...")
-    subtitle_clips = create_subtitle_clips(subtitles, video_size=(VIDEO_WIDTH, VIDEO_HEIGHT))
+    subtitle_clips = create_subtitle_clips(subtitles, video_size=(VIDEO_WIDTH, VIDEO_HEIGHT),
+                                           style=caption_style)
 
     # Composite video + subtitles — explicitly set size
     final_video = CompositeVideoClip(

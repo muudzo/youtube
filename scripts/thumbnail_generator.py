@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional, List
 
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
+from PIL import Image, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from dotenv import load_dotenv; load_dotenv(override=True)
@@ -31,9 +31,10 @@ _FONT_PATHS = [
 _FONT_SIZE = max(THUMBNAIL_FONT_SIZE, 100)
 
 
-def _load_font(size: int) -> ImageFont.FreeTypeFont:
-    """Load the best available bold font."""
-    for path in _FONT_PATHS:
+def _load_font(size: int, preferred: str = None) -> ImageFont.FreeTypeFont:
+    """Load ``preferred`` if it resolves, else the best available bold font."""
+    candidates = [preferred, *_FONT_PATHS] if preferred else _FONT_PATHS
+    for path in candidates:
         try:
             return ImageFont.truetype(path, size)
         except (IOError, OSError):
@@ -150,14 +151,29 @@ def _wrap_text(draw: ImageDraw.Draw, text: str, font: ImageFont.FreeTypeFont, ma
     return lines
 
 
-def _add_text_overlay(img: Image.Image, text: str, text_color: str = "white") -> Image.Image:
+def _parse_color(text_color: str) -> tuple[int, int, int]:
+    """Resolve a CSS colour name or hex string to RGB.
+
+    A name-only lookup used to collapse anything that was not "yellow" to
+    white, which silently killed two of the four thumbnail treatments -- they
+    pass hex. Pillow already knows both forms, so defer to it and keep white as
+    the fallback for genuinely unparseable input.
+    """
+    try:
+        return ImageColor.getrgb(text_color)[:3]
+    except (ValueError, AttributeError):
+        return (255, 255, 255)
+
+
+def _add_text_overlay(img: Image.Image, text: str, text_color: str = "white",
+                      font_path: str = None) -> Image.Image:
     """
     Add LARGE bold text with thick black stroke onto the thumbnail.
     A semi-transparent dark band is drawn behind the text area only,
     ensuring readability over any background.
     """
     text = text.upper()
-    font = _load_font(_FONT_SIZE)
+    font = _load_font(_FONT_SIZE, font_path)
 
     # We work on a copy
     img = img.copy()
@@ -193,11 +209,7 @@ def _add_text_overlay(img: Image.Image, text: str, text_color: str = "white") ->
     # Redraw after compositing
     draw = ImageDraw.Draw(img)
 
-    # Pick fill color
-    if text_color == "yellow":
-        fill = (255, 255, 0)
-    else:
-        fill = (255, 255, 255)
+    fill = _parse_color(text_color)
 
     # Draw each line centered with thick black outline
     outline_width = 6
@@ -229,6 +241,7 @@ def create_thumbnail(
     style: str = "bright",
     text_color: str = "white",
     stock_keywords: list[str] = None,
+    font_path: str = None,
 ) -> Path:
     """
     Create a bright, high-contrast YouTube thumbnail.
@@ -268,7 +281,7 @@ def create_thumbnail(
         img = _brighten_frame(img)
 
     # Add text overlay
-    img = _add_text_overlay(img, text, text_color=text_color)
+    img = _add_text_overlay(img, text, text_color=text_color, font_path=font_path)
 
     # Determine output path
     if output_path is None:

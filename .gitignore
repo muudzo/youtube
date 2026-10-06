@@ -1,12 +1,17 @@
 .env
 client_secret.json
 token.json
+token_nl.json
+.venv/
 __pycache__/
 *.pyc
+.coverage
+.pytest_cache/
 output/videos/*
 output/audio/*
 output/thumbnails/*
 output/subtitles/*
+output/logs/*
 assets/stock_footage/*
 assets/music/*
 assets/fonts/*

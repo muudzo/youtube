@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.youtube.autopilot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>__REPO_DIR__/cron/run_autopilot.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_DIR__</string>
+
+    <!-- Start at login and keep the daemon alive across crashes/reboots. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <!-- If it crashes, wait 5 min before relaunching (avoid tight respawn). -->
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
+
+    <!-- Run as background work so video rendering doesn't fight the UI. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__REPO_DIR__/output/logs/autopilot.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO_DIR__/output/logs/autopilot.err.log</string>
+</dict>
+</plist>

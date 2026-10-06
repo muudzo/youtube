@@ -1,0 +1,29 @@
+# Nederlandse onderwerpen — de vloer onder de pipeline.
+#
+# scripts/nl/topics.py mijnt live zoekvraag via YouTube-autocomplete en NOS.
+# Als beide bronnen wegvallen, produceert het kanaal hieruit verder.
+#
+# Criteria: evergreen, uitlegbaar in 9 minuten, en er is een stelling over te
+# verdedigen. Geen gezondheid, geen financieel advies, geen partijpolitiek —
+# scripts/nl/safety.py blokkeert die categorieën toch.
+
+Hoe de Deltawerken Nederland droog houden
+Waarom Amsterdamse grachtenpanden scheef staan
+Hoe de Nederlandse taal is ontstaan
+Waarom Nederland zo plat is
+Hoe een polder werkt en wat er misgaat als hij faalt
+Waarom Nederlandse fietspaden anders zijn dan overal elders
+Hoe Schiphol onder zeeniveau kan liggen
+Waarom Nederland de hoogste bevolkingsdichtheid van Europa heeft
+Hoe de Zuiderzee het IJsselmeer werd
+Waarom Nederlandse trappen zo steil zijn
+Hoe windmolens vroeger echt water wegpompten
+Waarom Nederland zoveel water exporteert zonder dat iemand het merkt
+Hoe het Nederlandse spoorwegnet het drukste van Europa werd
+Waarom Nederlandse steden bijna geen wolkenkrabbers hebben
+Hoe de Afsluitdijk de Noordzee buiten hield
+Waarom Nederlandse huizen zulke grote ramen hebben
+Hoe de Nederlandse rechtspraak in de praktijk werkt
+Waarom de Randstad geen echte stad is
+Hoe Nederland de tweede voedselexporteur ter wereld werd
+Waarom Nederlandse dijken bijna nooit meer breken

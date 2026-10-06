@@ -28,6 +28,7 @@ from moviepy import (
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from scripts.video_assembler import caption_box_size
 from config import (
     SHORTS_WIDTH,
     SHORTS_HEIGHT,
@@ -161,8 +162,15 @@ def create_short(
     footage_files: list,
     output_path: Path,
     hook_text: str = "",
+    caption_style=None,
+    cut_range: tuple = None,
 ) -> Path:
-    """Create a polished vertical 9:16 YouTube Short."""
+    """Create a polished vertical 9:16 YouTube Short.
+
+    ``caption_style`` and ``cut_range`` are optional per-video overrides used
+    by the Dutch pipeline so Shorts don't all share one caption treatment and
+    cut rhythm. Both default to the previous fixed behaviour.
+    """
     global _short_effect_idx
     _short_effect_idx = 0
 
@@ -206,8 +214,9 @@ def create_short(
         # faster cuts (3-5s) were tanking retention.
         clip_durations = []
         remaining = footage_duration
+        lo, hi = cut_range if cut_range else (5.0, 8.0)
         while remaining > 0:
-            d = random.uniform(5.0, 8.0)
+            d = random.uniform(lo, hi)
             d = min(d, remaining)
             clip_durations.append(d)
             remaining -= d
@@ -246,6 +255,15 @@ def create_short(
         video = ColorClip((SHORTS_WIDTH, SHORTS_HEIGHT), (15, 15, 20), duration=duration)
 
     # ── Subtitle overlays — bold, bottom-third, with bg box ──
+    cap_size = getattr(caption_style, "font_size", 85)
+    cap_color = getattr(caption_style, "color", "white")
+    cap_stroke = getattr(caption_style, "stroke_width", 4)
+    cap_y = getattr(caption_style, "position", 0.78)
+    cap_upper = getattr(caption_style, "uppercase", True)
+    # Integer alpha, not a float — PIL rejects "rgba(0,0,0,0.65)" and the
+    # subtitle clip is then silently dropped. 166 is 0.65 * 255.
+    cap_bg = "rgba(0,0,0,166)" if getattr(caption_style, "box", True) else None
+
     sub_clips = []
     for sub in subtitles:
         if sub["end"] > duration:
@@ -254,21 +272,25 @@ def create_short(
         if dur <= 0:
             continue
         try:
+            cap_text = sub["text"].upper() if cap_upper else sub["text"]
+            cap_font = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+            cap_box = caption_box_size(cap_text, cap_font, cap_size,
+                                       cap_stroke, SHORTS_WIDTH - 120)
             txt = (
                 TextClip(
-                    text=sub["text"].upper(),
-                    font_size=85,
-                    color="white",
-                    bg_color="rgba(0,0,0,0.65)",
+                    text=cap_text,
+                    font_size=cap_size,
+                    color=cap_color,
+                    bg_color=cap_bg,
                     stroke_color="black",
-                    stroke_width=4,
-                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    stroke_width=cap_stroke,
+                    font=cap_font,
                     method="caption",
-                    size=(SHORTS_WIDTH - 120, None),
+                    size=cap_box,
                     text_align="center",
                     transparent=True,
                 )
-                .with_position(("center", 0.78), relative=True)
+                .with_position(("center", cap_y), relative=True)
                 .with_start(sub["start"])
                 .with_duration(dur)
             )

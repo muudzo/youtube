@@ -1,7 +1,8 @@
-#!/bin/bash
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:$PATH"
-# Daily engagement booster — replies to comments, pins questions
-cd /Users/tatendanyemudzo/youtube
-source .env 2>/dev/null
-export GROQ_API_KEY PEXELS_API_KEY GEMINI_API_KEY
-/usr/bin/python3 scripts/engagement_booster.py full --max-replies 15 >> /tmp/youtube_engagement.log 2>&1
+#!/bin/zsh
+# Daily engagement booster — replies to comments, pins questions.
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_DIR"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+[ -f "$REPO_DIR/.env" ] && { set -a; source "$REPO_DIR/.env"; set +a; }
+PY="$REPO_DIR/.venv/bin/python"
+"$PY" scripts/engagement_booster.py full --max-replies 15 >> /tmp/youtube_engagement.log 2>&1
