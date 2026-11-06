@@ -41,6 +41,7 @@ from scripts.nl.script_generator import (
 from scripts.nl.seo import optimize_script_seo_nl
 from scripts.nl.shorts import extract_short_hook_nl, short_title_nl
 from scripts.nl.variation import VideoVariant, build_variant
+from scripts.series import Episode
 from scripts.subtitle_generator import (
     estimate_timestamps,
     generate_subtitles,
@@ -96,8 +97,13 @@ def produce(
     schedule: str = None,
     keep_local: bool = None,
     salt: str = "",
+    episode: "Episode | None" = None,
 ) -> dict:
-    """Produce one Dutch video (and optionally its Short) from a topic."""
+    """Produce one Dutch video (and optionally its Short) from a topic.
+
+    ``episode`` brands the long-form as a series episode: numbered title,
+    series footer with playlist and previous-episode links.
+    """
     blocked = safety.classify(topic)
     if blocked:
         raise UnsafeTopicError(
@@ -222,6 +228,7 @@ def produce(
         uploaded = _upload(
             script, variant, video_path, thumbnail,
             short_path, short_thumb, short_meta, privacy, schedule,
+            episode,
         )
     else:
         print("\n[7/7] Upload overgeslagen (gebruik --upload)")
@@ -300,9 +307,19 @@ def _build_short(script: dict, variant: VideoVariant, slug: str,
         return None, None, {}
 
 
+def _long_form_metadata(script: dict, episode: "Episode | None") -> tuple[str, str]:
+    """Title and description for the long-form, series-branded when relevant."""
+    title = script["title"]
+    description = script.get("description", "")
+    if episode is None:
+        return title, description
+    return episode.title(title), description + episode.description_block()
+
+
 def _upload(script: dict, variant: VideoVariant, video_path: Path,
             thumbnail: Path, short_path: Path, short_thumb: Path,
-            short_meta: dict, privacy: str, schedule: str) -> dict:
+            short_meta: dict, privacy: str, schedule: str,
+            episode: "Episode | None" = None) -> dict:
     """Upload long-form then Short, disclosing synthetic media on both."""
     from scripts.nl.channel_guard import assert_distinct_channels
     from scripts.youtube_uploader import upload_with_thumbnail
@@ -316,13 +333,14 @@ def _upload(script: dict, variant: VideoVariant, video_path: Path,
     if identity:
         print(f"  Kanaal: {identity['title']} ({identity['id']})")
 
+    title, description = _long_form_metadata(script, episode)
     uploaded: dict = {}
     try:
         video_id = upload_with_thumbnail(
             video_path=str(video_path),
             thumbnail_path=str(thumbnail),
-            title=script["title"],
-            description=script.get("description", ""),
+            title=title,
+            description=description,
             tags=script.get("tags", []),
             privacy=privacy,
             publish_at=schedule,

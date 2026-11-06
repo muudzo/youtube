@@ -81,8 +81,16 @@ CATEGORIES = {
 }
 
 
-def get_authenticated_service():
-    """Authenticate and return a YouTube API service object."""
+class MissingTokenError(RuntimeError):
+    """No usable token, and the caller cannot open a browser to log in."""
+
+
+def get_authenticated_service(interactive: bool = True):
+    """Authenticate and return a YouTube API service object.
+
+    ``interactive=False`` is for the launchd daemons: with no usable token
+    they must fail fast, not block forever on a browser login nobody sees.
+    """
     creds = None
 
     # Load cached token if it exists and has safe permissions
@@ -93,6 +101,11 @@ def get_authenticated_service():
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+        elif not interactive:
+            raise MissingTokenError(
+                f"{TOKEN_FILE.name} is missing or unusable. Log this channel in once "
+                f"from a terminal (see DEPLOY.md / DEPLOY_NL.md)."
+            )
         else:
             if not CLIENT_SECRET_FILE.exists():
                 raise FileNotFoundError(

@@ -27,6 +27,40 @@ launchd (com.youtube.autopilot)
   request a quota increase in Google Cloud Console and raise
   `DAILY_UPLOAD_UNIT_BUDGET` in [config.py](config.py).
 
+## Series mode (what the daemons run now)
+
+Each channel publishes **one series**, episode by episode, in the order listed
+in its file:
+
+| Channel | File | Series | Title on YouTube |
+|---|---|---|---|
+| English | [series/en.json](series/en.json) | Vanished Without a Trace | `<title> \| Vanished Ep. 3` |
+| Dutch | [series/nl.json](series/nl.json) | Nederland Verklaard | `<titel> \| Nederland Verklaard #3` |
+
+For every episode the daemon: creates the series playlist if it doesn't exist
+yet → renders the next episode → uploads it with the numbered title and a
+footer linking the playlist and the previous episode → adds it to the playlist
+→ **deletes the local files**. Progress lives in
+`output/series_<id>_state.json` (don't delete it; that restarts at episode 1).
+
+- An episode whose render fails 3 times is skipped; numbering stays gap-free.
+  Upload failures (e.g. a new channel's daily upload cap) are counted
+  separately: retried every 3h, skipped only after 6.
+- If the daemon is killed after an upload but before saving (e.g.
+  `./manage.sh stop` mid-Short-upload), the next run finds the episode on the
+  channel by its numbered title and records it instead of uploading it again.
+- Only one channel renders at a time (render lock: this Mac has 8 GB RAM), and
+  a manual `--upload` run is refused while the daemon is publishing that series.
+- No render starts with under `MIN_FREE_DISK_GB` (3 GB) free.
+- When the list runs out the daemon idles; add topics to the JSON to continue.
+
+```bash
+.venv/bin/python autopilot.py --series-status                    # English progress
+.venv/bin/python autopilot.py --series --no-upload --keep-local  # render next EN episode locally
+.venv/bin/python brainrot.py series                              # Dutch progress
+.venv/bin/python brainrot.py series --next                       # render next NL episode locally
+```
+
 ## One-time setup
 
 ```bash

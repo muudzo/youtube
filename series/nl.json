@@ -1,0 +1,34 @@
+{
+  "id": "nederland_verklaard",
+  "channel": "nl",
+  "language": "nl",
+  "playlist_title": "Nederland Verklaard",
+  "playlist_description": "Waarom Nederland eruitziet zoals het eruitziet: dijken, polders, steile trappen, scheve grachtenpanden. Eén vraag per aflevering, tot op de bodem uitgezocht.",
+  "title_format": "{title} | Nederland Verklaard #{n}",
+  "labels": {
+    "series_line": "Aflevering {n} van {series}",
+    "full_series": "Hele serie",
+    "previous": "Vorige aflevering"
+  },
+  "episodes": [
+    "Hoe de Deltawerken Nederland droog houden",
+    "Waarom Amsterdamse grachtenpanden scheef staan",
+    "Hoe een polder werkt en wat er misgaat als hij faalt",
+    "Hoe windmolens vroeger echt water wegpompten",
+    "Waarom Nederlandse trappen zo steil zijn",
+    "Hoe de Zuiderzee het IJsselmeer werd",
+    "Hoe Schiphol onder zeeniveau kan liggen",
+    "Waarom Nederland zo plat is",
+    "Hoe de Afsluitdijk de Noordzee buiten hield",
+    "Waarom Nederlandse fietspaden anders zijn dan overal elders",
+    "Waarom Nederlandse huizen zulke grote ramen hebben",
+    "Hoe de Nederlandse taal is ontstaan",
+    "Waarom Nederlandse steden bijna geen wolkenkrabbers hebben",
+    "Hoe het Nederlandse spoorwegnet het drukste van Europa werd",
+    "Waarom de Randstad geen echte stad is",
+    "Hoe Nederland de tweede voedselexporteur ter wereld werd",
+    "Waarom Nederland de hoogste bevolkingsdichtheid van Europa heeft",
+    "Waarom Nederlandse dijken bijna nooit meer breken",
+    "Waarom Nederland zoveel water exporteert zonder dat iemand het merkt"
+  ]
+}

@@ -54,8 +54,12 @@ def run_pipeline(
     privacy: str = "public",
     schedule: str = None,
     keep_local: bool = None,
+    episode=None,
 ):
     """Run the full video pipeline from topic to finished video.
+
+    ``episode`` (a scripts.series.Episode) brands the long-form upload as a
+    series episode: numbered title plus a series footer in the description.
 
     When ``upload`` succeeds, local artifacts (render, audio, subtitles,
     thumbnails, downloaded footage) are deleted unless ``keep_local`` is set.
@@ -200,11 +204,15 @@ def run_pipeline(
             from scripts.youtube_uploader import upload_with_thumbnail
 
             # Upload long-form
+            title = episode.title(script["title"]) if episode else script["title"]
+            description = _build_description(script)
+            if episode:
+                description += episode.description_block()
             video_id = upload_with_thumbnail(
                 video_path=str(output_video),
                 thumbnail_path=str(thumbnail),
-                title=script["title"],
-                description=_build_description(script),
+                title=title,
+                description=description,
                 tags=script.get("tags", []),
                 privacy=privacy,
                 publish_at=schedule,

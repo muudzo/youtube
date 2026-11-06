@@ -11,6 +11,9 @@ Usage:
     python autopilot.py --daemon           # Run forever on schedule
     python autopilot.py --research-only    # Just find topics, don't produce
     python autopilot.py --topic "Custom Topic Here"  # Use a specific topic
+    python autopilot.py --series --daemon  # Publish this channel's series, in order
+    python autopilot.py --series --no-upload --keep-local  # Render next episode only
+    python autopilot.py --series-status    # Series progress
 """
 
 import argparse
@@ -26,8 +29,11 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from pipeline import run_pipeline
+from scripts import series as series_runner
 from scripts.topic_researcher import research_topics, save_topics
 from config import (
+    EN_SERIES_FILE,
+    PLAYLIST_UNIT_COST,
     DAILY_UPLOAD_UNIT_BUDGET,
     UPLOAD_UNIT_COST,
     THUMBNAIL_UNIT_COST,
@@ -191,13 +197,75 @@ def produce_one(state: dict, upload: bool = True, keep_local: bool = None) -> di
     return result
 
 
-def run_batch(num_videos: int = 1, upload: bool = True, keep_local: bool = None):
+def _series_youtube():
+    """YouTube client for the English channel; never opens a browser."""
+    from scripts.youtube_uploader import get_authenticated_service
+    return get_authenticated_service(interactive=False)
+
+
+def produce_one_series(state: dict, upload: bool = True, keep_local: bool = None) -> dict | None:
+    """Produce the next episode of this channel's series, then charge quota and log.
+
+    Returns None once every episode in series/en.json is published.
+    """
+    series = series_runner.load_series(EN_SERIES_FILE)
+
+    def produce(episode):
+        return run_pipeline(
+            topic=episode.topic,
+            upload=upload,
+            upload_short=True,
+            privacy="public",
+            keep_local=keep_local,
+            episode=episode,
+        )
+
+    result = series_runner.produce_next_episode(
+        series, series.state_file, produce, _series_youtube, upload=upload
+    )
+    if result is None:
+        print(f"\n  {series.playlist_title} is complete. "
+              f"Add episodes to series/{EN_SERIES_FILE.name} to continue.")
+        return None
+
+    spent = 0
+    if upload and result.get("status") != "skipped":
+        spent = charge_quota(state, result)
+        if result.get("in_playlist"):
+            state["quota_units_used"] += PLAYLIST_UNIT_COST
+            spent += PLAYLIST_UNIT_COST
+        save_state(state)
+
+    log_event({
+        "action": "series_episode",
+        "series": series.id,
+        "episode": result.get("episode"),
+        "topic": result.get("topic", ""),
+        "status": result.get("status", "unknown"),
+        "reason": result.get("reason") or result.get("error", ""),
+        "video_url": result.get("video_url", ""),
+        "short_url": result.get("short_url", ""),
+        "quota_spent": spent,
+    })
+    return result
+
+
+def run_batch(num_videos: int = 1, upload: bool = True, keep_local: bool = None,
+              use_series: bool = False):
     """Produce a fixed number of videos back-to-back."""
     state = load_state()
 
     for i in range(num_videos):
         print(f"\n[{i + 1}/{num_videos}]")
-        produce_one(state, upload=upload, keep_local=keep_local)
+        if use_series:
+            result = produce_one_series(state, upload=upload, keep_local=keep_local)
+            if result is None:
+                break
+            if result.get("status") not in ("success", "rendered"):
+                print(f"  Episode {result['status']}: "
+                      f"{result.get('reason') or result.get('error', '')}")
+        else:
+            produce_one(state, upload=upload, keep_local=keep_local)
 
         # Cool down between videos to avoid rate limits / CPU pinning
         if i < num_videos - 1:
@@ -211,7 +279,7 @@ def run_batch(num_videos: int = 1, upload: bool = True, keep_local: bool = None)
     print(f"{'=' * 60}")
 
 
-def run_daemon(keep_local: bool = None):
+def run_daemon(keep_local: bool = None, use_series: bool = False):
     """Run forever, producing as many videos as the daily quota allows.
 
     Produces back-to-back until the YouTube upload quota is exhausted, then
@@ -250,7 +318,25 @@ def run_daemon(keep_local: bool = None):
             _interruptible_sleep(wait, lambda: running)
             continue
 
-        produce_one(state, upload=True, keep_local=keep_local)
+        if use_series:
+            try:
+                result = produce_one_series(state, upload=True, keep_local=keep_local)
+            except series_runner.SeriesConfigError as e:
+                # A bad edit to series/en.json or its state file: say so and
+                # wait for a fix instead of crash-looping under launchd.
+                print(f"  Series configuration error: {e}")
+                result = {"status": "skipped"}
+            delay = series_runner.retry_delay_seconds(result)
+            if delay:
+                if result is not None and result.get("status") != "skipped":
+                    print(f"  Episode {result['status']}: {result.get('error', '')}")
+                elif result is not None and result.get("reason"):
+                    print(f"  Episode skipped: {result['reason']}")
+                print(f"  Next attempt in {delay / 3600:.1f}h.")
+                _interruptible_sleep(delay, lambda: running)
+                continue
+        else:
+            produce_one(state, upload=True, keep_local=keep_local)
 
         if running:
             _interruptible_sleep(PRODUCTION_COOLDOWN_SECONDS, lambda: running)
@@ -271,6 +357,10 @@ def main():
     parser.add_argument("--no-upload", action="store_true", help="Generate but don't upload")
     parser.add_argument("--keep-local", action="store_true",
                         help="Keep local files after upload (default: delete to save space)")
+    parser.add_argument("--series", action="store_true",
+                        help="Take topics from series/en.json in order, as numbered episodes")
+    parser.add_argument("--series-status", action="store_true",
+                        help="Show series progress and exit")
 
     args = parser.parse_args()
     keep_local = True if args.keep_local else None
@@ -281,6 +371,11 @@ def main():
         from scripts.youtube_uploader import TOKEN_FILE, get_authenticated_service
         get_authenticated_service()
         print(f"  Authenticated. Token written to {TOKEN_FILE}")
+        return
+
+    if args.series_status:
+        series = series_runner.load_series(EN_SERIES_FILE)
+        print(series_runner.describe(series, series_runner.load_state(series.state_file)))
         return
 
     if args.research_only:
@@ -302,9 +397,10 @@ def main():
         return
 
     if args.daemon:
-        run_daemon(keep_local=keep_local)
+        run_daemon(keep_local=keep_local, use_series=args.series)
     else:
-        run_batch(num_videos=args.videos, upload=not args.no_upload, keep_local=keep_local)
+        run_batch(num_videos=args.videos, upload=not args.no_upload, keep_local=keep_local,
+                  use_series=args.series)
 
 
 if __name__ == "__main__":

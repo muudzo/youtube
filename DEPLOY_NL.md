@@ -124,6 +124,15 @@ quota limit, and raising it is the riskiest change available to you.
 Two topics that keep colliding? `--salt v2` re-rolls the variant for the same
 subject without reusing the first version's look and voice.
 
+## De serie: Nederland Verklaard
+
+The launchd daemon runs `brainrot.py daemon --series`: instead of mining live
+topics it publishes [series/nl.json](series/nl.json) in order as numbered
+episodes in one playlist, still governed by the cadence cap above. See the
+"Series mode" section of DEPLOY.md for how it works. The playlist is only
+created after `channel_guard` confirms `token_nl.json` is not the English
+channel.
+
 ## Running it unattended
 
 ```bash

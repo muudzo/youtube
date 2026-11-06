@@ -221,3 +221,29 @@ def test_a_failing_short_still_ships_the_long_form(wired, monkeypatch):
 
     assert result["short_path"] is None
     assert Path(result["video_path"]).exists()
+
+
+def test_a_series_episode_uploads_with_the_branded_title_and_series_links(wired, monkeypatch):
+    """Without this the playlist exists but nothing on the video says it is a series."""
+    from config import NL_SERIES_FILE
+    from scripts.series import Episode, load_series
+
+    captured: dict = {}
+
+    def fake_upload(**kwargs):
+        captured.update(kwargs)
+        return "video123"
+
+    import scripts.youtube_uploader as uploader
+    monkeypatch.setattr(uploader, "upload_with_thumbnail", fake_upload)
+
+    episode = Episode(series=load_series(NL_SERIES_FILE), number=4, topic=TOPIC,
+                      playlist_id="PLnl", previous_video_id="vorige1")
+
+    produce_mod.produce(TOPIC, upload=True, make_short=False, keep_local=True,
+                        episode=episode)
+
+    assert captured["title"].endswith(" | Nederland Verklaard #4")
+    assert captured["description"].startswith(SCRIPT["description"])
+    assert "https://www.youtube.com/playlist?list=PLnl" in captured["description"]
+    assert "https://youtu.be/vorige1" in captured["description"]

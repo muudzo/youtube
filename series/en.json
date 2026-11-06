@@ -1,0 +1,39 @@
+{
+  "id": "vanished",
+  "channel": "en",
+  "language": "en",
+  "playlist_title": "Vanished Without a Trace",
+  "playlist_description": "Famous people, planes and ships that disappeared, and what the evidence says happened to them. One case per episode, told in full.",
+  "title_format": "{title} | Vanished Ep. {n}",
+  "labels": {
+    "series_line": "Episode {n} of {series}",
+    "full_series": "Full series",
+    "previous": "Previous episode"
+  },
+  "episodes": [
+    "Amelia Earhart's Last Flight Over the Pacific",
+    "Jimmy Hoffa Walked Into a Parking Lot and Was Never Seen Again",
+    "D.B. Cooper Jumped From a Plane With $200,000 and Vanished",
+    "The Lost Colony of Roanoke",
+    "Glenn Miller's Plane Vanished Over the English Channel",
+    "The Mary Celeste Was Found Drifting With No One Aboard",
+    "Three Lighthouse Keepers Vanished From the Flannan Isles",
+    "Flight 19 Disappeared Over the Bermuda Triangle",
+    "Australia's Prime Minister Harold Holt Went for a Swim and Never Came Back",
+    "Agatha Christie Vanished for 11 Days",
+    "Percy Fawcett Went Looking for a Lost City in the Amazon",
+    "Louis Le Prince, the Man Who Invented Cinema, Vanished From a Train",
+    "Jim Thompson, the Silk King Who Vanished in the Malaysian Jungle",
+    "Frederick Valentich's Final Radio Call Over the Bass Strait",
+    "The Franklin Expedition Ships That Vanished in the Arctic",
+    "Judge Joseph Crater, the Missingest Man in New York",
+    "Ambrose Bierce Rode Into the Mexican Revolution and Vanished",
+    "Joshua Slocum Sailed Alone Around the World Then Vanished at Sea",
+    "The SS Waratah Vanished Off South Africa With 211 Aboard",
+    "Raoul Wallenberg Saved Thousands Then Vanished Into the Soviet Union",
+    "Henry Hudson Was Cast Adrift and Never Seen Again",
+    "Antoine de Saint-Exupery's Last Flight",
+    "Dorothy Arnold, the Heiress Who Vanished on Fifth Avenue",
+    "George Mallory Vanished Near the Summit of Everest"
+  ]
+}

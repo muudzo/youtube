@@ -16,3 +16,6 @@ assets/stock_footage/*
 assets/music/*
 assets/fonts/*
 !.gitkeep
+output/*.lock
+output/.render.lock
+output/*.json.tmp

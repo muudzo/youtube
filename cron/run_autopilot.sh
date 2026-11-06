@@ -23,6 +23,7 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-# Produce as many videos as the daily YouTube quota allows, deleting local
-# files after each confirmed upload.
-exec "$PY" autopilot.py --daemon
+# Publish the channel series (series/en.json) episode by episode, as many as
+# the daily YouTube quota allows, deleting local files after each confirmed
+# upload.
+exec "$PY" autopilot.py --daemon --series

@@ -109,6 +109,29 @@ PRODUCTION_COOLDOWN_SECONDS = int(os.getenv("PRODUCTION_COOLDOWN_SECONDS", "120"
 
 
 # ══════════════════════════════════════════════════════════
+# SERIES — one ordered series per channel
+# ══════════════════════════════════════════════════════════
+# Each channel publishes a single named series: episodes come from its JSON
+# file in order, carry "Ep. N" in the title, link back to the previous episode
+# and land in the series playlist. Edit the JSON to change or extend a series.
+SERIES_DIR = BASE_DIR / "series"
+EN_SERIES_FILE = SERIES_DIR / "en.json"
+NL_SERIES_FILE = SERIES_DIR / "nl.json"
+
+# playlistItems.insert and playlists.insert each cost 50 quota units.
+PLAYLIST_UNIT_COST = 50
+
+# A render peaks at roughly 2-3 GB on disk (downloaded footage + moviepy temp
+# files + the mp4). The Oct 2026 windmill render died mid-write on a nearly
+# full disk and left a corrupt mp4, so refuse to start below this.
+MIN_FREE_DISK_GB = float(os.getenv("MIN_FREE_DISK_GB", "3"))
+
+# Both daemons share one 8 GB Mac; two moviepy renders at once swap hard or
+# get killed. This lock file serialises renders across processes.
+RENDER_LOCK_FILE = OUTPUT_DIR / ".render.lock"
+
+
+# ══════════════════════════════════════════════════════════
 # DUTCH BRAINROT CHANNEL (nl)
 # ══════════════════════════════════════════════════════════
 # A separate surface from the English dark-history pipeline above: fresh

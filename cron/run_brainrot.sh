@@ -29,4 +29,4 @@ fi
 
 # Unlike autopilot.py, this does NOT run until the API quota is exhausted.
 # scripts/nl/cadence.py caps it to NL_MAX_UPLOADS_PER_DAY with jitter.
-exec "$PY" brainrot.py daemon
+exec "$PY" brainrot.py daemon --series

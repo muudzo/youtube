@@ -7,6 +7,10 @@ Nederlandse kanaal-entrypoint.
     python brainrot.py produce "<onderwerp>"  # één video, geen upload
     python brainrot.py produce "<x>" --upload
     python brainrot.py daemon                 # continu, met cadansbegrenzer
+    python brainrot.py daemon --series        # de serie uit series/nl.json, op volgorde
+    python brainrot.py series                 # voortgang van de serie
+    python brainrot.py series --next          # volgende aflevering renderen, geen upload
+    python brainrot.py series --next --upload # volgende aflevering publiceren
 
 Deliberately separate from autopilot.py: that daemon produces until the API
 quota is dry, which is the upload pattern YouTube's inauthentic-content policy
@@ -28,7 +32,13 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from config import NL_MAX_UPLOADS_PER_DAY, NL_STATE_FILE, NL_TOKEN_FILE, OUTPUT_DIR
+from config import (
+    NL_MAX_UPLOADS_PER_DAY,
+    NL_SERIES_FILE,
+    NL_STATE_FILE,
+    NL_TOKEN_FILE,
+    OUTPUT_DIR,
+)
 
 # Point the uploader at THIS channel's OAuth token before anything imports it.
 # scripts/youtube_uploader reads YOUTUBE_TOKEN_FILE at import time, and
@@ -38,6 +48,7 @@ os.environ.setdefault("YOUTUBE_TOKEN_FILE", NL_TOKEN_FILE)
 from scripts.nl import cadence, safety
 from scripts.nl.produce import UnsafeTopicError, produce
 from scripts.nl.topics import discover_topics_nl, load_seed_topics, save_topics
+from scripts import series as series_runner
 
 LOG_FILE = OUTPUT_DIR / "nl_log.json"
 
@@ -162,11 +173,83 @@ def cmd_produce(topic: str, upload: bool, privacy: str, no_short: bool,
     return 0
 
 
-def cmd_daemon(keep_local: bool) -> int:
+def _series_youtube():
+    """YouTube client for the Dutch channel, refusing the English channel.
+
+    The guard runs before the playlist is created, so a mis-authorised token
+    cannot even create the series playlist on the wrong channel.
+    """
+    from scripts.nl.channel_guard import assert_distinct_channels
+    from scripts.youtube_uploader import get_authenticated_service
+
+    service = get_authenticated_service(interactive=False)
+    assert_distinct_channels(Path(NL_TOKEN_FILE), Path("token.json"))
+    return service
+
+
+def _produce_series_episode(upload: bool, keep_local: bool) -> dict | None:
+    """Produce the next episode of series/nl.json. None once it is complete."""
+    series = series_runner.load_series(NL_SERIES_FILE)
+
+    def run(episode):
+        return produce(topic=episode.topic, upload=upload,
+                       keep_local=keep_local or None, episode=episode)
+
+    return series_runner.produce_next_episode(
+        series, series.state_file, run, _series_youtube, upload=upload
+    )
+
+
+def _after_series_episode(result: dict) -> dict:
+    """Record cadence + log for one series attempt; returns the cadence state."""
+    state = cadence.load_state()
+    if result.get("video_id"):
+        state = cadence.record_upload(state)
+        cadence.save_state(state)
+    _log({
+        "action": "series_episode",
+        "episode": result.get("episode"),
+        "topic": result.get("topic", ""),
+        "status": result.get("status"),
+        "reason": result.get("reason") or result.get("error", ""),
+        "variant": result.get("variant"),
+        "video_url": result.get("video_url", ""),
+        "short_url": result.get("short_url", ""),
+    })
+    return state
+
+
+def cmd_series(produce_next: bool, upload: bool, keep_local: bool) -> int:
+    """Show series progress, or produce the next episode."""
+    series = series_runner.load_series(NL_SERIES_FILE)
+    if not produce_next:
+        print(series_runner.describe(series, series_runner.load_state(series.state_file)))
+        return 0
+
+    if upload:
+        decision = cadence.check(cadence.load_state())
+        if not decision.allowed:
+            print(f"  Upload geblokkeerd door cadansbegrenzer: {decision.reason}")
+            return 2
+
+    result = _produce_series_episode(upload=upload, keep_local=keep_local)
+    if result is None:
+        print("  Serie compleet. Voeg afleveringen toe aan series/nl.json.")
+        return 0
+    if upload:
+        _after_series_episode(result)
+    print(f"  Status: {result.get('status')} "
+          f"{result.get('reason') or result.get('error') or ''}".rstrip())
+    return 0 if result.get("status") in ("success", "rendered") else 1
+
+
+def cmd_daemon(keep_local: bool, use_series: bool = False) -> int:
     """Produce continuously, governed by the cadence limiter."""
     print("=" * 58)
     print("  NEDERLANDS KANAAL — daemon")
     print(f"  Max {NL_MAX_UPLOADS_PER_DAY} uploads/dag, gejitterd")
+    if use_series:
+        print(f"  Serie: {series_runner.load_series(NL_SERIES_FILE).playlist_title}")
     print(f"  State: {NL_STATE_FILE}")
     print("  Ctrl+C om te stoppen")
     print("=" * 58)
@@ -206,6 +289,29 @@ def cmd_daemon(keep_local: bool) -> int:
             sleep_interruptibly(delay)
             if not running:
                 break
+
+        if use_series:
+            try:
+                result = _produce_series_episode(upload=True, keep_local=keep_local)
+            except series_runner.SeriesConfigError as e:
+                # Bad edit to series/nl.json or its state file: wait for a fix
+                # instead of crash-looping under launchd.
+                print(f"  Serie-configuratiefout: {e}")
+                result = {"status": "skipped"}
+            if result is None:
+                print("  Serie compleet. Voeg afleveringen toe aan series/nl.json.")
+            else:
+                state = _after_series_episode(result)
+                if result.get("status") != "success":
+                    print(f"  Aflevering {result['status']}: "
+                          f"{result.get('reason') or result.get('error', '')}")
+            delay = series_runner.retry_delay_seconds(result)
+            if delay:
+                print(f"  Volgende poging over {delay / 3600:.1f}u.")
+                sleep_interruptibly(delay)
+            else:
+                print(f"  {cadence.describe(state)}")
+            continue
 
         topic = next_topic(state)
         if not topic:
@@ -325,6 +431,14 @@ def main() -> int:
 
     p_daemon = sub.add_parser("daemon", help="Continu produceren")
     p_daemon.add_argument("--keep-local", action="store_true")
+    p_daemon.add_argument("--series", action="store_true",
+                          help="Publiceer de serie uit series/nl.json op volgorde")
+
+    p_series = sub.add_parser("series", help="Voortgang van de serie, of de volgende aflevering")
+    p_series.add_argument("--next", action="store_true",
+                          help="Volgende aflevering renderen (zonder --upload: alleen lokaal)")
+    p_series.add_argument("--upload", action="store_true")
+    p_series.add_argument("--keep-local", action="store_true")
 
     args = parser.parse_args()
 
@@ -340,7 +454,9 @@ def main() -> int:
         return cmd_produce(args.topic, args.upload, args.privacy,
                            args.no_short, args.keep_local, args.salt)
     if args.command == "daemon":
-        return cmd_daemon(args.keep_local)
+        return cmd_daemon(args.keep_local, args.series)
+    if args.command == "series":
+        return cmd_series(args.next, args.upload, args.keep_local)
     return 1
 
 
