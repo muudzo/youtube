@@ -22,7 +22,10 @@ from moviepy import (
 )
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from scripts.fonts import font_path as resolve_font
 from config import (
+    RENDER_THREADS,
+    RENDER_PRESET,
     VIDEO_WIDTH,
     VIDEO_HEIGHT,
     FPS,
@@ -394,7 +397,7 @@ def create_subtitle_clips(subtitles: list, video_size: tuple = None,
             relative = True
 
             caption_text = sub["text"].upper() if uppercase else sub["text"]
-            font_path = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+            font_path = resolve_font()
             box = caption_box_size(caption_text, font_path, font_size,
                                    stroke_width, w - 300)
 
@@ -503,8 +506,8 @@ def assemble_longform_video(
         codec="libx264",
         audio_codec="aac",
         bitrate="8000k",
-        preset="medium",
-        threads=4,
+        preset=RENDER_PRESET,
+        threads=RENDER_THREADS,
     )
 
     final_video.close()
@@ -580,8 +583,8 @@ def assemble_video(
         codec="libx264",
         audio_codec="aac",
         bitrate="8000k",
-        preset="medium",
-        threads=4,
+        preset=RENDER_PRESET,
+        threads=RENDER_THREADS,
     )
 
     # Cleanup

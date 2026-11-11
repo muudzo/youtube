@@ -29,7 +29,10 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from scripts.video_assembler import caption_box_size
+from scripts.fonts import font_path as resolve_font
 from config import (
+    RENDER_THREADS,
+    RENDER_PRESET,
     SHORTS_WIDTH,
     SHORTS_HEIGHT,
     SHORTS_FPS,
@@ -273,7 +276,7 @@ def create_short(
             continue
         try:
             cap_text = sub["text"].upper() if cap_upper else sub["text"]
-            cap_font = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+            cap_font = resolve_font()
             cap_box = caption_box_size(cap_text, cap_font, cap_size,
                                        cap_stroke, SHORTS_WIDTH - 120)
             txt = (
@@ -311,7 +314,7 @@ def create_short(
                     color="#FFD700",  # gold
                     stroke_color="black",
                     stroke_width=6,
-                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    font=resolve_font(),
                     method="caption",
                     size=(SHORTS_WIDTH - 60, None),
                     text_align="center",
@@ -332,7 +335,7 @@ def create_short(
                     color="#FFD700",
                     stroke_color="black",
                     stroke_width=5,
-                    font="/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                    font=resolve_font(),
                     method="caption",
                     size=(SHORTS_WIDTH - 100, None),
                     text_align="center",
@@ -361,8 +364,8 @@ def create_short(
         codec="libx264",
         audio_codec="aac",
         bitrate="8000k",
-        preset="medium",
-        threads=4,
+        preset=RENDER_PRESET,
+        threads=RENDER_THREADS,
     )
 
     final.close()

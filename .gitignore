@@ -19,3 +19,8 @@ assets/fonts/*
 output/*.lock
 output/.render.lock
 output/*.json.tmp
+
+# Linux deployment artifacts and platform metadata
+.DS_Store
+output/youtube-autopilot@.service
+output/linux-smoke/

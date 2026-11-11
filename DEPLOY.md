@@ -1,5 +1,7 @@
 # Deploying the Autopilot (auto-upload, no local storage)
 
+For Ubuntu/systemd VMs, use [DEPLOY_LINUX.md](DEPLOY_LINUX.md). This page describes macOS.
+
 This sets the channel up to run **fully unattended** on this Mac: it produces
 videos continuously, uploads them to YouTube, and **deletes every local file
 after each confirmed upload** so nothing piles up on disk.

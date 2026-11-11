@@ -1,10 +1,13 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # One-time setup for the YouTube autopilot on this machine.
 # Idempotent — safe to re-run. Installs ffmpeg, a Python venv with deps,
 # required directories, and the launchd agents (not started — see manage.sh).
 
 set -e
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ "$(uname -s)" = "Linux" ]; then
+    exec bash "$REPO_DIR/linux/setup.sh" "$@"
+fi
 cd "$REPO_DIR"
 
 echo "==> [1/5] ffmpeg"

@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import NL_TOKEN_FILE
 
@@ -68,6 +70,7 @@ def test_both_channel_tokens_are_gitignored():
     assert NL_TOKEN_FILE in ignored
 
 
+@pytest.mark.skipif(not (REPO / '.git').exists(), reason='Requires a Git checkout; deployed runtime omits Git metadata')
 def test_dutch_token_is_actually_ignored_by_git():
     """Assert against git itself, not just the file's text."""
     result = subprocess.run(
