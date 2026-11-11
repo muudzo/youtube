@@ -14,6 +14,7 @@ from typing import Optional, List
 from PIL import Image, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from scripts.fonts import font_path
 from dotenv import load_dotenv; load_dotenv(override=True)
 from config import THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, THUMBNAIL_DIR, THUMBNAIL_FONT_SIZE, STOCK_DIR
 
@@ -21,6 +22,7 @@ from config import THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, THUMBNAIL_DIR, THUMBNAIL_F
 # ─── Font config ──────────────────────────────────────────
 # Prefer Impact (the classic YouTube thumbnail font), fall back to Arial Bold
 _FONT_PATHS = [
+    font_path("Impact.ttf"),
     "/System/Library/Fonts/Supplemental/Impact.ttf",
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
     "/System/Library/Fonts/Helvetica.ttc",

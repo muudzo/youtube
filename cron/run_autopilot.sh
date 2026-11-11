@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # Entry point for the autopilot daemon (run by launchd).
 # Portable: resolves the repo root from this script's own location, so it
 # works regardless of username or where the repo is cloned.

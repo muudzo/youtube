@@ -23,6 +23,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
+from scripts.fonts import font_path
 from scripts.nl.voices import Voice, pick_contrasting_voice, pick_voice
 
 
@@ -188,15 +189,13 @@ class ThumbnailTreatment:
 
 
 # Colour alone was not enough: rendered in one typeface, the whole set still
-# read as a single template. Each treatment carries its own face. All four ship
-# with macOS; thumbnail_generator falls back to its own chain elsewhere.
-_FONT_DIR = "/System/Library/Fonts/Supplemental"
+# read as a single template. Resolve four native Mac or open Linux typefaces.
 
 THUMBNAIL_TREATMENTS: tuple[ThumbnailTreatment, ...] = (
-    ThumbnailTreatment("wit_hard", "white", "bright", f"{_FONT_DIR}/Impact.ttf"),
-    ThumbnailTreatment("geel_schok", "yellow", "bright", f"{_FONT_DIR}/Arial Black.ttf"),
-    ThumbnailTreatment("mint_koel", "#9FFFCB", "bright", f"{_FONT_DIR}/Verdana Bold.ttf"),
-    ThumbnailTreatment("rood_alarm", "#FF5A5A", "bright", f"{_FONT_DIR}/Trebuchet MS Bold.ttf"),
+    ThumbnailTreatment("wit_hard", "white", "bright", font_path("Impact.ttf")),
+    ThumbnailTreatment("geel_schok", "yellow", "bright", font_path("Arial Black.ttf")),
+    ThumbnailTreatment("mint_koel", "#9FFFCB", "bright", font_path("Verdana Bold.ttf")),
+    ThumbnailTreatment("rood_alarm", "#FF5A5A", "bright", font_path("Trebuchet MS Bold.ttf")),
 )
 
 

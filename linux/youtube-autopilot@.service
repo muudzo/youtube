@@ -1,0 +1,31 @@
+[Unit]
+Description=YouTube production pipeline (%i channel)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__GROUP__
+WorkingDirectory=__REPO_DIR__
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=IMAGEIO_FFMPEG_EXE=/usr/bin/ffmpeg
+ExecCondition=__REPO_DIR__/.venv/bin/python __REPO_DIR__/linux/preflight.py --channel %i
+ExecStart=/bin/bash __REPO_DIR__/linux/run.sh %i
+Restart=on-failure
+RestartSec=60
+TimeoutStopSec=300
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__REPO_DIR__
+Slice=youtube-pipeline.slice
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Shared CPU and memory budget for YouTube production channels
+
+[Slice]
+CPUQuota=180%
+MemoryHigh=4G
+MemoryMax=5G
+TasksMax=256

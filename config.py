@@ -26,14 +26,16 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")   # Free: https://aistudio.goog
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")   # Free: https://www.pexels.com/api/
 
 # ─── Video Settings ─────────────────────────────────────
-VIDEO_WIDTH = 1920
-VIDEO_HEIGHT = 1080
+VIDEO_WIDTH = int(os.getenv("VIDEO_WIDTH", "1920"))
+VIDEO_HEIGHT = int(os.getenv("VIDEO_HEIGHT", "1080"))
 FPS = 30
 VIDEO_FORMAT = "mp4"
+RENDER_THREADS = max(1, int(os.getenv("RENDER_THREADS", "4")))
+RENDER_PRESET = os.getenv("RENDER_PRESET", "medium")
 
 # Shorts settings
-SHORTS_WIDTH = 1080
-SHORTS_HEIGHT = 1920
+SHORTS_WIDTH = int(os.getenv("SHORTS_WIDTH", "1080"))
+SHORTS_HEIGHT = int(os.getenv("SHORTS_HEIGHT", "1920"))
 SHORTS_FPS = 30
 
 # ─── Audio / TTS Settings ───────────────────────────────
@@ -48,7 +50,7 @@ EDGE_TTS_VOICE = "en-US-GuyNeural"  # deep male narrator — perfect for dark hi
 # specific English visual keywords. openai/gpt-oss-120b is a reasoning model
 # that spends the token budget on reasoning and returns truncated JSON at
 # 8192, needing 16384+ — which does not fit the free tier's 8000 TPM.
-SCRIPT_MODEL = "qwen/qwen3.8-27b"
+SCRIPT_MODEL = os.getenv("SCRIPT_MODEL", "qwen/qwen3.8-27b")
 
 # Groq free tier is 8000 tokens/minute across all models. One video makes three
 # Groq calls (script, SEO title, Short hook) back to back, so they contend for

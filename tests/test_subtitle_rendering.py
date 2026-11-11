@@ -65,7 +65,9 @@ def test_zero_length_subtitles_are_skipped():
 # MoviePy's method="caption" with size=(W, None) returns a bitmap marginally
 # SHORTER than the font size, so glyphs were cut off inside their own clip.
 
-FONT = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+from scripts.fonts import font_path
+
+FONT = font_path()
 
 
 def test_caption_box_is_taller_than_the_font_size():

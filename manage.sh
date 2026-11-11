@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # Start/stop/inspect the autopilot daemon (and the nightly cleanup agent).
 #
 #   ./manage.sh start     # load + launch the daemon (and cleanup agent)
@@ -8,6 +8,9 @@
 #   ./manage.sh logs       # tail the daemon log
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ "$(uname -s)" = "Linux" ]; then
+    exec bash "$REPO_DIR/linux/manage.sh" "$@"
+fi
 LA="$HOME/Library/LaunchAgents"
 UID_NUM="$(id -u)"
 # The English autopilot and the Dutch daemon publish to DIFFERENT channels, so
