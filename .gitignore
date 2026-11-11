@@ -24,3 +24,4 @@ output/*.json.tmp
 .DS_Store
 output/youtube-autopilot@.service
 output/linux-smoke/
+output/illustrated_demo/

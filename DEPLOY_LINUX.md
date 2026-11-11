@@ -88,6 +88,16 @@ Services check keys, token structure, file permissions, fonts, dependencies and 
 
 ## Operations
 
+### CPU-only illustrated story demo
+
+```bash
+.venv/bin/python scripts/illustrated_demo.py
+```
+
+Creates an original fictional 30-second paper-cut story, `output/illustrated_demo/the-waiting-light.mp4`, plus a six-panel storyboard and technical metadata. Artwork, layered motion, camera movement, captions, and ambient music are rendered locally. Narration uses the free Edge speech endpoint and needs internet, but no API key. This demonstrates illustrated animation, not diffusion-generated character animation. It never uploads or changes channel progress. Cached scene narration can be reused on subsequent renders.
+
+## Service commands
+
 ```bash
 bash manage.sh status
 bash manage.sh stop
